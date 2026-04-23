@@ -21,7 +21,7 @@ export default function Topbar({ title, subtitle }: { title: string; subtitle?: 
       padding: '0 24px', position: 'sticky', top: 0, zIndex: 40
     }}>
       <div>
-        <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{title}</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: '#1e3a5f' }}>{title}</div>
         {subtitle && <div style={{ fontSize: 11, color: '#94a3b8' }}>{subtitle}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -33,7 +33,7 @@ export default function Topbar({ title, subtitle }: { title: string; subtitle?: 
           background: '#f1f5f9', borderRadius: 20, fontSize: 11, color: '#475569', cursor: 'default'
         }}>
           <div style={{
-            width: 24, height: 24, borderRadius: '50%', background: '#3b82f6',
+            width: 24, height: 24, borderRadius: '50%', background: '#1e3a5f',
             color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 9, fontWeight: 700
           }}>{initials}</div>
