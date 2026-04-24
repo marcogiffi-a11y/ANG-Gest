@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/Topbar'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { Preventivo, StatoPreventivo } from '@/lib/types'
 
 const fmt = (n: number) =>
@@ -22,10 +23,14 @@ const STATO: Record<StatoPreventivo, { bg: string; color: string; label: string 
 
 export default function PreventiviPage() {
   const supabase = createClient()
-  const [preventivi, setPreventivi] = useState<Preventivo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [cerca, setCerca] = useState('')
-  const [filtroStato, setFiltroStato] = useState('')
+  const router   = useRouter()
+
+  const [preventivi,    setPreventivi]    = useState<Preventivo[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [cerca,         setCerca]         = useState('')
+  const [filtroStato,   setFiltroStato]   = useState('')
+  const [converting,    setConverting]    = useState<string | null>(null)
+  const [toast,         setToast]         = useState<{ msg: string; ordine: string } | null>(null)
 
   useEffect(() => {
     supabase
@@ -41,6 +46,63 @@ export default function PreventiviPage() {
   async function aggiornaStato(id: string, stato: StatoPreventivo) {
     await supabase.from('preventivi').update({ stato }).eq('id', id)
     setPreventivi(prev => prev.map(p => p.id === id ? { ...p, stato } : p))
+  }
+
+  // ── Converti in ordine ──────────────────────────────────────────────────────
+  async function convertiInOrdine(p: Preventivo) {
+    if (!confirm(`Confermi l'accettazione di ${p.numero_offerta}?\nViene creato automaticamente un ordine con numero progressivo.`)) return
+    setConverting(p.id)
+    try {
+      // 1. Calcola prossimo numero ordine
+      const anno = new Date().getFullYear()
+      const { data: lastOrd } = await supabase
+        .from('progetti')
+        .select('numero_ordine')
+        .ilike('numero_ordine', `ORD-${anno}-%`)
+        .order('numero_ordine', { ascending: false })
+        .limit(1)
+
+      let nextNum = 1
+      if (lastOrd && lastOrd.length > 0) {
+        const match = lastOrd[0].numero_ordine.match(/(\d+)$/)
+        if (match) nextNum = parseInt(match[1]) + 1
+      }
+      const numeroOrdine = `ORD-${anno}-${String(nextNum).padStart(3, '0')}`
+
+      // 2. Calcola importo netto dal totale voci
+      const importoNetto = totaleVoci(p)
+
+      // 3. Crea ordine (progetto) da preventivo
+      const { error } = await supabase.from('progetti').insert({
+        numero_ordine:    numeroOrdine,
+        numero_offerta:   p.numero_offerta,
+        cliente_id:       (p as any).cliente_id || null,
+        tipo_servizio:    p.tipo_servizio || 'ingegneria',
+        servizi:          [],
+        importo_netto:    importoNetto,
+        cassa_percentuale: 0,
+        iva_percentuale:  p.iva_percentuale || 22,
+        note:             `Generato da ${p.numero_offerta} il ${new Date().toLocaleDateString('it-IT')}`,
+        stato:            'attivo',
+      })
+
+      if (error) throw error
+
+      // 4. Segna preventivo come accettato
+      await aggiornaStato(p.id, 'accettato')
+
+      // 5. Toast e redirect
+      setToast({ msg: `${p.numero_offerta} convertito in`, ordine: numeroOrdine })
+      setTimeout(() => {
+        setToast(null)
+        router.push('/ordini')
+      }, 2200)
+    } catch (e) {
+      console.error(e)
+      alert('Errore durante la conversione in ordine.')
+    } finally {
+      setConverting(null)
+    }
   }
 
   const totaleVoci = (p: any) =>
@@ -66,13 +128,26 @@ export default function PreventiviPage() {
       <Topbar title="Preventivi" subtitle="Gestione offerte commerciali" />
       <div style={{ padding: '20px 24px' }}>
 
+        {/* Toast conversione */}
+        {toast && (
+          <div style={{
+            background: '#f0fdf4', border: '1px solid #6ab04c', borderRadius: 10,
+            padding: '12px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10,
+            fontSize: 13, color: '#166534', fontWeight: 500,
+          }}>
+            🎉 <strong>{toast.msg}</strong>&nbsp;
+            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1e3a5f' }}>{toast.ordine}</span>
+            &nbsp;— Reindirizzamento agli ordini...
+          </div>
+        )}
+
         {/* KPI */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
           {[
             { label: 'Preventivi trovati', value: filtered.length,  color: '#1e3a5f' },
             { label: 'Valore offerte',     value: fmt(totValore),   color: '#6ab04c' },
-            { label: 'In attesa',          value: totInAttesa,       color: '#92400e' },
-            { label: 'Accettati',          value: totAccettati,      color: '#166534' },
+            { label: 'In attesa',          value: totInAttesa,      color: '#92400e' },
+            { label: 'Accettati',          value: totAccettati,     color: '#166534' },
           ].map(k => (
             <div key={k.label} style={{ flex: 1, background: 'white', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 16px' }}>
               <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>{k.label}</div>
@@ -98,7 +173,7 @@ export default function PreventiviPage() {
           </select>
           <Link href="/preventivo/nuovo" style={{
             padding: '8px 16px', borderRadius: 7, background: '#6ab04c',
-            color: 'white', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap'
+            color: 'white', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap',
           }}>
             + Nuovo preventivo
           </Link>
@@ -131,12 +206,14 @@ export default function PreventiviPage() {
                 const scadenza = p.data_emissione
                   ? new Date(new Date(p.data_emissione).getTime() + (p.validita_giorni || 20) * 86400000).toLocaleDateString('it-IT')
                   : '—'
-                const servBg  = p.tipo_servizio === 'ingegneria' ? '#dbeafe' : '#fef3c7'
+                const servBg  = p.tipo_servizio === 'ingegneria' ? '#dbeafe' : '#fff3e0'
                 const servCol = p.tipo_servizio === 'ingegneria' ? '#1d4ed8' : '#92400e'
                 const servLbl = p.tipo_servizio === 'ingegneria' ? 'Ingegneria' : 'Fornitura/Posa'
+                const isConverting = converting === p.id
+
                 return (
                   <tr key={p.id}
-                    style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                    style={{ borderBottom: '1px solid #f1f5f9' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}
                   >
@@ -150,7 +227,7 @@ export default function PreventiviPage() {
                         <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: servBg, color: servCol }}>{servLbl}</span>
                       )}
                     </td>
-                    <td style={{ padding: '11px 12px', color: '#64748b', fontSize: 11, maxWidth: 220 }}>
+                    <td style={{ padding: '11px 12px', color: '#64748b', fontSize: 11, maxWidth: 200 }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.oggetto || '—'}</div>
                     </td>
                     <td style={{ padding: '11px 12px', fontWeight: 700, color: '#1e3a5f' }}>
@@ -169,13 +246,35 @@ export default function PreventiviPage() {
                       </select>
                     </td>
                     <td style={{ padding: '11px 12px' }}>
-                      <Link
-                        href={`/preventivo/${p.id}`}
-                        onClick={e => e.stopPropagation()}
-                        style={{ fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 6, background: '#f1f5f9', color: '#1e3a5f', textDecoration: 'none', whiteSpace: 'nowrap', border: '1px solid #e2e8f0' }}
-                      >
-                        ✏ Apri e modifica
-                      </Link>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <Link
+                          href={`/preventivo/${p.id}`}
+                          onClick={e => e.stopPropagation()}
+                          style={{ fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 6, background: '#f1f5f9', color: '#1e3a5f', textDecoration: 'none', whiteSpace: 'nowrap', border: '1px solid #e2e8f0' }}
+                        >
+                          ✏ Apri e modifica
+                        </Link>
+                        {/* Pulsante Accettato — solo se non già accettato/rifiutato */}
+                        {p.stato !== 'accettato' && p.stato !== 'rifiutato' && (
+                          <button
+                            onClick={e => { e.stopPropagation(); convertiInOrdine(p) }}
+                            disabled={isConverting}
+                            style={{
+                              fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+                              border: 'none', cursor: isConverting ? 'not-allowed' : 'pointer',
+                              background: isConverting ? '#94a3b8' : '#22c55e', color: 'white',
+                              whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
+                            }}
+                          >
+                            {isConverting ? '...' : '✓ Accettato'}
+                          </button>
+                        )}
+                        {p.stato === 'accettato' && (
+                          <span style={{ fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 6, background: '#dcfce7', color: '#166534', whiteSpace: 'nowrap' }}>
+                            ✓ In ordine
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
