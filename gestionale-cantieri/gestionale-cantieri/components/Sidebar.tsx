@@ -7,21 +7,22 @@ import Image from 'next/image'
 
 const navItems = [
   { section: 'Principale' },
-  { href: '/dashboard',    label: 'Dashboard',      icon: '▦' },
-  { href: '/preventivi',   label: 'Preventivi',     icon: '📝' },
-  { href: '/ordini',       label: 'Ordini',          icon: '📄' },
-  { href: '/progetti',     label: 'Progetti',        icon: '≡' },
-  { href: '/fatture',      label: 'Fatture & SAL',   icon: '📋', dot: true },
-  { href: '/scadenze',     label: 'Scadenze',        icon: '📅' },
+  { href: '/dashboard',       label: 'Dashboard',         icon: '▦' },
+  { href: '/preventivi',      label: 'Preventivi',         icon: '📝' },
+  { href: '/ordini',          label: 'Ordini',             icon: '📄' },
+  { href: '/progetti',        label: 'Progetti',           icon: '≡' },
+  { href: '/fatture',         label: 'Fatture & SAL',      icon: '📋', dot: true },
+  { href: '/scadenze',        label: 'Scadenze',           icon: '📅' },
   { section: 'Inserimento' },
-  { href: '/ordine/nuovo', label: '+ Nuovo ordine',  icon: '+' },
-  { href: '/clienti',      label: 'Clienti',         icon: '👤' },
-  { href: '/portafogli',   label: 'Portafogli',      icon: '💼' },
-  { href: '/documenti',    label: 'Documenti',       icon: '📁' },
+  { href: '/preventivo/nuovo',label: '+ Nuovo preventivo', icon: '+' },
+  { href: '/ordine/nuovo',    label: '+ Nuovo ordine',     icon: '+' },
+  { href: '/clienti',         label: 'Clienti',            icon: '👤' },
+  { href: '/portafogli',      label: 'Portafogli',         icon: '💼' },
+  { href: '/documenti',       label: 'Documenti',          icon: '📁' },
   { section: 'Configurazione' },
-  { href: '/legenda',      label: 'Legenda servizi', icon: '★' },
-  { href: '/utenti',       label: 'Utenti',          icon: '👥' },
-  { href: '/impostazioni', label: 'Impostazioni',    icon: '⚙' },
+  { href: '/legenda',         label: 'Legenda servizi',    icon: '★' },
+  { href: '/utenti',          label: 'Utenti',             icon: '👥' },
+  { href: '/impostazioni',    label: 'Impostazioni',       icon: '⚙' },
 ]
 
 export default function Sidebar() {
@@ -58,7 +59,7 @@ export default function Sidebar() {
               }}>{item.section}</div>
             )
           }
-          const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+          const active = pathname === item.href || (item.href !== '/dashboard' && item.href !== '/preventivo/nuovo' && item.href !== '/ordine/nuovo' && pathname.startsWith(item.href))
           return (
             <Link key={item.href} href={item.href} style={{
               display: 'flex', alignItems: 'center', gap: 9, padding: '8px 16px',
