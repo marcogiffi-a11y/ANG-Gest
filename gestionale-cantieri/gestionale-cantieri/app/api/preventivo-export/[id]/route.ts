@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import fs from 'fs'
+import path from 'path'
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, AlignmentType, BorderStyle, WidthType, HeadingLevel,
-  Header, Footer, PageNumber, UnderlineType, ShadingType,
+  Header, Footer, UnderlineType, ShadingType, ImageRun, VerticalAlign,
 } from 'docx'
+
+const BLUE    = '1e3a5f'
+const GREEN   = '6ab04c'
+const LBLUE   = 'dbeafe'
+const WHITE   = 'FFFFFF'
+const GREY    = '64748b'
+const LGREY   = 'f8fafc'
 
 function fmt(n: number) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n)
@@ -14,129 +23,135 @@ function fmtData(d: string) {
   return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const BORDER_NONE = {
-  top: { style: BorderStyle.NONE, size: 0 },
-  bottom: { style: BorderStyle.NONE, size: 0 },
-  left: { style: BorderStyle.NONE, size: 0 },
-  right: { style: BorderStyle.NONE, size: 0 },
+const NO_BORDER = {
+  top:    { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  left:   { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  right:  { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
 }
-const BORDER_TABLE = {
-  top: { style: BorderStyle.SINGLE, size: 4, color: '1e3a5f' },
-  bottom: { style: BorderStyle.SINGLE, size: 4, color: '1e3a5f' },
-  left: { style: BorderStyle.SINGLE, size: 4, color: '1e3a5f' },
-  right: { style: BorderStyle.SINGLE, size: 4, color: '1e3a5f' },
+const THIN_BORDER = {
+  top:    { style: BorderStyle.SINGLE, size: 2, color: 'e2e8f0' },
+  bottom: { style: BorderStyle.SINGLE, size: 2, color: 'e2e8f0' },
+  left:   { style: BorderStyle.SINGLE, size: 2, color: 'e2e8f0' },
+  right:  { style: BorderStyle.SINGLE, size: 2, color: 'e2e8f0' },
 }
 
-function p(text: string, opts: any = {}) {
+function run(text: string, opts: { bold?: boolean; italic?: boolean; size?: number; color?: string; underline?: boolean } = {}) {
+  return new TextRun({
+    text,
+    bold:    opts.bold    ?? false,
+    italics: opts.italic  ?? false,
+    size:    opts.size    ?? 20,
+    color:   opts.color   ?? '000000',
+    underline: opts.underline ? { type: UnderlineType.SINGLE } : undefined,
+    font: 'Calibri',
+  })
+}
+
+function para(children: TextRun[], opts: { align?: typeof AlignmentType[keyof typeof AlignmentType]; before?: number; after?: number } = {}) {
   return new Paragraph({
-    children: [new TextRun({ text, ...opts })],
-    spacing: { after: opts.after ?? 120 },
+    children,
     alignment: opts.align ?? AlignmentType.LEFT,
+    spacing: { before: opts.before ?? 0, after: opts.after ?? 120 },
   })
 }
 
-function bold(text: string, size = 22) {
-  return new TextRun({ text, bold: true, size })
-}
-
-function sectionTitle(text: string) {
-  return new Paragraph({
-    children: [new TextRun({ text: text.toUpperCase(), bold: true, size: 20, color: '1e3a5f' })],
-    spacing: { before: 280, after: 120 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '6ab04c' } },
+function cell(children: Paragraph[], opts: { bg?: string; bold?: boolean; w?: number; span?: number; align?: typeof VerticalAlign[keyof typeof VerticalAlign] } = {}) {
+  return new TableCell({
+    children,
+    columnSpan: opts.span,
+    shading: opts.bg ? { type: ShadingType.SOLID, fill: opts.bg } : undefined,
+    width: opts.w ? { size: opts.w, type: WidthType.PERCENTAGE } : undefined,
+    verticalAlign: opts.align ?? VerticalAlign.CENTER,
+    borders: THIN_BORDER,
+    margins: { top: 80, bottom: 80, left: 100, right: 100 },
   })
 }
 
-function clausola(titolo: string, testo: string) {
+function clausola(titolo: string, testo: string): Paragraph[] {
   return [
     new Paragraph({
-      children: [new TextRun({ text: titolo, bold: true, size: 20 })],
-      spacing: { before: 240, after: 80 },
+      children: [run(titolo, { bold: true, size: 20 })],
+      spacing: { before: 260, after: 80 },
     }),
     new Paragraph({
-      children: [new TextRun({ text: testo, size: 18 })],
+      children: [run(testo, { size: 19 })],
+      alignment: AlignmentType.JUSTIFIED,
       spacing: { after: 80 },
     }),
   ]
 }
 
+function bulletClausola(items: string[]): Paragraph[] {
+  return items.map(t => new Paragraph({
+    children: [run(`• ${t}`, { size: 19 })],
+    spacing: { after: 60 },
+    indent: { left: 200 },
+  }))
+}
+
+function numToWords(n: number): string {
+  const map: Record<number, string> = {
+    7:'sette',10:'dieci',14:'quattordici',15:'quindici',
+    20:'venti',30:'trenta',60:'sessanta',90:'novanta',
+  }
+  return map[n] || String(n)
+}
+
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
 
-  const { data: p2 } = await supabase
+  const { data: prev } = await supabase
     .from('preventivi')
-    .select('*, clienti(ragione_sociale, piva, pec, indirizzo, referente), preventivo_voci(*), preventivo_tranche(*)')
+    .select('*, clienti(ragione_sociale, piva, pec, sdi, indirizzo, referente), preventivo_voci(*), preventivo_tranche(*)')
     .eq('id', params.id)
     .single()
 
-  if (!p2) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!prev) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const voci = [...(p2.preventivo_voci || [])].sort((a: any, b: any) => a.ordine - b.ordine)
-  const tranche = [...(p2.preventivo_tranche || [])].sort((a: any, b: any) => a.ordine - b.ordine)
-  const cliente = p2.clienti as any
-  const totale = voci.reduce((acc: number, v: any) => acc + (v.importo || 0), 0)
-  const ivaPerc = p2.iva_percentuale
-  const isPrivato = p2.tipo_cliente === 'privato'
+  const voci    = [...(prev.preventivo_voci    || [])].sort((a:any,b:any) => a.ordine-b.ordine)
+  const tranche = [...(prev.preventivo_tranche || [])].sort((a:any,b:any) => a.ordine-b.ordine)
+  const cliente = prev.clienti as any
+  const totale  = voci.reduce((acc:number,v:any) => acc + (v.importo||0), 0)
+  const ivaPerc = prev.iva_percentuale || 0
+  const isPrivato = prev.tipo_cliente === 'privato'
 
   // Raggruppa voci per sezione
   const sezioniMap: Record<string, any[]> = {}
-  voci.forEach((v: any) => {
-    if (!sezioniMap[v.sezione]) sezioniMap[v.sezione] = []
+  voci.forEach((v:any) => {
+    if(!sezioniMap[v.sezione]) sezioniMap[v.sezione] = []
     sezioniMap[v.sezione].push(v)
   })
 
-  // Righe tabella voci
+  // Logo
+  let logoBuffer: Buffer | null = null
+  try {
+    const logoPath = path.join(process.cwd(), 'public', 'logo.jpg')
+    logoBuffer = fs.readFileSync(logoPath)
+  } catch {}
+
+  // Header tabella voci
   const voceRows: TableRow[] = []
 
-  // Header tabella
   voceRows.push(new TableRow({
+    tableHeader: true,
     children: [
-      new TableCell({
-        children: [new Paragraph({ children: [new TextRun({ text: 'DESCRIZIONE ATTIVITÀ', bold: true, size: 18, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
-        shading: { type: ShadingType.SOLID, fill: '1e3a5f' },
-        width: { size: 75, type: WidthType.PERCENTAGE },
-        borders: BORDER_TABLE,
-        margins: { top: 80, bottom: 80, left: 80, right: 80 },
-      }),
-      new TableCell({
-        children: [new Paragraph({ children: [new TextRun({ text: 'IMPORTO', bold: true, size: 18, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
-        shading: { type: ShadingType.SOLID, fill: '1e3a5f' },
-        width: { size: 25, type: WidthType.PERCENTAGE },
-        borders: BORDER_TABLE,
-        margins: { top: 80, bottom: 80, left: 80, right: 80 },
-      }),
+      cell([para([run('DESCRIZIONE ATTIVITÀ', { bold:true, size:19, color:WHITE })])], { bg:BLUE, w:78 }),
+      cell([para([run('IMPORTO',              { bold:true, size:19, color:WHITE })], { align:AlignmentType.CENTER })], { bg:BLUE, w:22 }),
     ],
   }))
 
   Object.entries(sezioniMap).forEach(([sez, vv]) => {
-    // riga intestazione sezione
     voceRows.push(new TableRow({
       children: [
-        new TableCell({
-          children: [new Paragraph({ children: [bold(sez.toUpperCase(), 18)], alignment: AlignmentType.LEFT })],
-          columnSpan: 2,
-          shading: { type: ShadingType.SOLID, fill: 'dbeafe' },
-          borders: BORDER_TABLE,
-          margins: { top: 60, bottom: 60, left: 80, right: 80 },
-        }),
+        cell([para([run(sez.toUpperCase(), { bold:true, size:19, color:WHITE })])], { bg:BLUE, span:2 }),
       ],
     }))
-    // righe voci
-    vv.forEach((v: any) => {
+    vv.forEach((v:any) => {
       voceRows.push(new TableRow({
         children: [
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: v.descrizione, size: 18 })], alignment: AlignmentType.LEFT })],
-            width: { size: 75, type: WidthType.PERCENTAGE },
-            borders: BORDER_TABLE,
-            margins: { top: 60, bottom: 60, left: 80, right: 80 },
-          }),
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: 'a corpo', size: 18, italics: true })], alignment: AlignmentType.CENTER })],
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            borders: BORDER_TABLE,
-            margins: { top: 60, bottom: 60, left: 80, right: 80 },
-          }),
+          cell([para([run(v.descrizione, { size:19 })])], { w:78 }),
+          cell([para([run('a corpo', { italic:true, size:19 })], { align:AlignmentType.CENTER })], { w:22 }),
         ],
       }))
     })
@@ -145,127 +160,158 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   // Riga totale
   voceRows.push(new TableRow({
     children: [
-      new TableCell({
-        children: [new Paragraph({ children: [bold('TOTALE COMPLESSIVO (imponibile IVA esclusa)', 20)], alignment: AlignmentType.RIGHT })],
-        shading: { type: ShadingType.SOLID, fill: 'f0fdf4' },
-        borders: BORDER_TABLE,
-        margins: { top: 100, bottom: 100, left: 80, right: 80 },
-      }),
-      new TableCell({
-        children: [new Paragraph({ children: [bold(fmt(totale), 22)], alignment: AlignmentType.CENTER })],
-        shading: { type: ShadingType.SOLID, fill: 'f0fdf4' },
-        borders: BORDER_TABLE,
-        margins: { top: 100, bottom: 100, left: 80, right: 80 },
-      }),
+      cell([para([run('TOTALE COMPLESSIVO (imponibile IVA esclusa)', { bold:true, size:20 })], { align:AlignmentType.RIGHT })],
+           { bg:'f0fdf4', w:78 }),
+      cell([para([run(fmt(totale), { bold:true, size:22 })], { align:AlignmentType.CENTER })],
+           { bg:'f0fdf4', w:22 }),
     ],
   }))
 
   // Tabella tranche
   const trancheRows: TableRow[] = [
     new TableRow({
+      tableHeader: true,
       children: [
-        new TableCell({ children: [new Paragraph({ children: [bold('TRANCHE', 18, )], alignment: AlignmentType.CENTER })], shading: { type: ShadingType.SOLID, fill: '1e3a5f' }, borders: BORDER_TABLE, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '%', bold: true, size: 18, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })], shading: { type: ShadingType.SOLID, fill: '1e3a5f' }, borders: BORDER_TABLE, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'IMPORTO', bold: true, size: 18, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })], shading: { type: ShadingType.SOLID, fill: '1e3a5f' }, borders: BORDER_TABLE, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
+        cell([para([run('CONDIZIONE',  { bold:true, size:19, color:WHITE })], { align:AlignmentType.CENTER })], { bg:BLUE }),
+        cell([para([run('%',           { bold:true, size:19, color:WHITE })], { align:AlignmentType.CENTER })], { bg:BLUE }),
+        cell([para([run('IMPORTO',     { bold:true, size:19, color:WHITE })], { align:AlignmentType.CENTER })], { bg:BLUE }),
       ],
     }),
-    ...tranche.map((t: any) => new TableRow({
+    ...tranche.map((t:any) => new TableRow({
       children: [
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `• ${t.descrizione}`, size: 18 })] })], borders: BORDER_TABLE, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `${t.percentuale}%`, size: 18 })], alignment: AlignmentType.CENTER })], borders: BORDER_TABLE, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: fmt(totale * t.percentuale / 100), size: 18 })], alignment: AlignmentType.CENTER })], borders: BORDER_TABLE, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
+        cell([para([run(t.descrizione, { size:19 })])]),
+        cell([para([run(`${t.percentuale}%`, { size:19 })], { align:AlignmentType.CENTER })]),
+        cell([para([run(fmt(totale * t.percentuale / 100), { bold:true, size:19 })], { align:AlignmentType.CENTER })]),
       ],
     })),
   ]
 
+  // Header documento con logo
+  const headerChildren: any[] = []
+
+  if (logoBuffer) {
+    // Tabella header: logo | spazio | testo azienda
+    headerChildren.push(new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top:    { style: BorderStyle.NONE, size: 0 },
+        bottom: { style: BorderStyle.SINGLE, size: 8, color: GREEN },
+        left:   { style: BorderStyle.NONE, size: 0 },
+        right:  { style: BorderStyle.NONE, size: 0 },
+        insideH:{ style: BorderStyle.NONE, size: 0 },
+        insideV:{ style: BorderStyle.NONE, size: 0 },
+      },
+      rows: [new TableRow({
+        children: [
+          // Logo
+          new TableCell({
+            children: [new Paragraph({
+              children: [new ImageRun({ data: logoBuffer, transformation: { width: 110, height: 70 }, type: 'jpg' })],
+              spacing: { after: 0 },
+            })],
+            width: { size: 25, type: WidthType.PERCENTAGE },
+            borders: NO_BORDER,
+            verticalAlign: VerticalAlign.CENTER,
+          }),
+          // Spazio centrale
+          new TableCell({
+            children: [para([run('')])],
+            width: { size: 40, type: WidthType.PERCENTAGE },
+            borders: NO_BORDER,
+          }),
+          // Testo azienda a destra
+          new TableCell({
+            children: [
+              para([run('Società di Ingegneria',                              { italic:true, size:18, color:BLUE })], { align:AlignmentType.RIGHT }),
+              para([run('Progettazione Impianti',                             { italic:true, size:17, color:GREY })], { align:AlignmentType.RIGHT }),
+              para([run('Soluzioni per efficientamento energetico',           { italic:true, size:17, color:GREY })], { align:AlignmentType.RIGHT }),
+              para([run('Pratiche edilizie e progettazioni strutturali',      { italic:true, size:17, color:GREY })], { align:AlignmentType.RIGHT }),
+              para([run('Installazione Impianti da fonti rinnovabili',        { italic:true, size:17, color:GREY })], { align:AlignmentType.RIGHT, after:0 }),
+            ],
+            width: { size: 35, type: WidthType.PERCENTAGE },
+            borders: NO_BORDER,
+            verticalAlign: VerticalAlign.CENTER,
+          }),
+        ],
+      })],
+    }))
+  } else {
+    // Fallback testo se logo non trovato
+    headerChildren.push(para([run('Athena Next Gen S.r.l.', { bold:true, size:24, color:BLUE })]))
+    headerChildren.push(para([run('Società di Ingegneria · Progettazione Impianti · Soluzioni per efficientamento energetico', { italic:true, size:17, color:GREY })]))
+  }
+
   const doc = new Document({
     styles: {
       default: {
-        document: {
-          run: { font: 'Calibri', size: 20 },
-        },
+        document: { run: { font: 'Calibri', size: 20 } },
       },
     },
     sections: [{
       properties: {
-        page: {
-          margin: { top: 1200, bottom: 1200, left: 1200, right: 1000 },
-        },
+        page: { margin: { top: 1400, bottom: 1200, left: 1200, right: 1000 } },
       },
       headers: {
-        default: new Header({
-          children: [
-            new Table({
-              width: { size: 100, type: WidthType.PERCENTAGE },
-              borders: { top: { style: BorderStyle.NONE, size: 0 }, bottom: { style: BorderStyle.SINGLE, size: 6, color: '6ab04c' }, left: { style: BorderStyle.NONE, size: 0 }, right: { style: BorderStyle.NONE, size: 0 }, insideH: { style: BorderStyle.NONE, size: 0 }, insideV: { style: BorderStyle.NONE, size: 0 } },
-              rows: [new TableRow({
-                children: [
-                  new TableCell({
-                    children: [
-                      new Paragraph({ children: [new TextRun({ text: 'Athena Next Gen S.r.l.', bold: true, size: 26, color: '1e3a5f' })] }),
-                      new Paragraph({ children: [new TextRun({ text: 'Società di Ingegneria', size: 16, italics: true })] }),
-                      new Paragraph({ children: [new TextRun({ text: 'Progettazione Impianti · Soluzioni per efficientamento energetico', size: 16, italics: true })] }),
-                      new Paragraph({ children: [new TextRun({ text: 'Pratiche edilizie e progettazioni strutturali · Installazione Impianti da fonti rinnovabili', size: 16, italics: true })] }),
-                    ],
-                    borders: BORDER_NONE,
-                  }),
-                ],
-              })],
-            }),
-          ],
-        }),
+        default: new Header({ children: headerChildren }),
       },
       footers: {
         default: new Footer({
-          children: [
-            new Paragraph({
-              children: [
-                new TextRun({ text: 'Athena Next Gen S.r.l. – Via Mar Della Cina, 254 – 00144 Roma – amministrazione@athenanextgen.it – +39 06 86677367 – P.IVA/C.F. 16563471008', size: 14, italics: true, color: '64748b' }),
-              ],
-              alignment: AlignmentType.CENTER,
-              border: { top: { style: BorderStyle.SINGLE, size: 4, color: '6ab04c' } },
-            }),
-          ],
+          children: [new Paragraph({
+            children: [run(
+              'Athena Next Gen S.r.l. – Via Mar Della Cina, 254 – 00144 Roma – amministrazione@athenanextgen.it – +39 06 86677367 – P.IVA/C.F. 16563471008',
+              { italic:true, size:14, color:GREY }
+            )],
+            alignment: AlignmentType.CENTER,
+            border: { top: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
+            spacing: { before: 80 },
+          })],
         }),
       },
       children: [
-        // Numero offerta e data
+
+        // Offerta n. X del X
         new Paragraph({
           children: [
-            bold('Offerta n. ', 22),
-            new TextRun({ text: p2.numero_offerta || '', bold: true, underline: { type: UnderlineType.SINGLE }, size: 22 }),
-            bold('  del  ', 22),
-            new TextRun({ text: fmtData(p2.data_emissione), bold: true, underline: { type: UnderlineType.SINGLE }, size: 22 }),
+            run('Offerta n. ', { bold:true, size:22 }),
+            run(prev.numero_offerta || '_______________', { bold:true, size:22, underline:true }),
+            run('   del   ', { bold:true, size:22 }),
+            run(fmtData(prev.data_emissione), { bold:true, size:22, underline:true }),
           ],
-          spacing: { before: 200, after: 300 },
+          spacing: { before: 240, after: 320 },
         }),
 
         // Destinatario
-        new Paragraph({ children: [bold('Egr./Spett.le', 20)], spacing: { after: 60 } }),
-        new Paragraph({ children: [new TextRun({ text: cliente?.ragione_sociale || '_____________________________________', size: 20, bold: !!cliente })], spacing: { after: 60 } }),
-        new Paragraph({ children: [new TextRun({ text: cliente?.indirizzo || '_____________________________________', size: 20 })], spacing: { after: 60 } }),
-        ...(cliente?.piva ? [new Paragraph({ children: [new TextRun({ text: `P.IVA: ${cliente.piva}`, size: 18 })], spacing: { after: 60 } })] : []),
-        ...(cliente?.pec ? [new Paragraph({ children: [new TextRun({ text: `PEC: ${cliente.pec}`, size: 18 })], spacing: { after: 60 } })] : []),
+        para([run('Egr./Spett.le', { bold:true, size:20 })], { after:60 }),
+        para([run(cliente?.ragione_sociale || '_____________________________________', { size:20, bold:!!cliente?.ragione_sociale })], { after:60 }),
+        para([run(cliente?.indirizzo       || '_____________________________________', { size:20 })], { after:60 }),
+        ...(cliente?.piva ? [para([run(`P.IVA: ${cliente.piva}`,   { size:18 })], { after:40 })] : []),
+        ...(cliente?.pec  ? [para([run(`PEC: ${cliente.pec}`,     { size:18 })], { after:40 })] : []),
+        ...(cliente?.sdi  ? [para([run(`SDI: ${cliente.sdi}`,     { size:18 })], { after:40 })] : []),
 
-        new Paragraph({ children: [], spacing: { after: 120 } }),
+        para([run('')], { after:160 }),
 
         // Oggetto
         new Paragraph({
           children: [
-            bold('Oggetto: ', 22),
-            new TextRun({ text: p2.oggetto || 'Offerta Economica — Impianto Fotovoltaico', size: 22, bold: true }),
+            run('Oggetto: ', { bold:true, size:22 }),
+            run(prev.oggetto || 'Offerta Economica — Impianto Fotovoltaico', { bold:true, size:22 }),
           ],
           spacing: { after: 240 },
         }),
 
-        // Intro
+        // Testo introduttivo
         new Paragraph({
-          children: [new TextRun({
-            text: `In riferimento ai contatti intercorsi e su Vs. richiesta, Athena Next Gen S.r.l. è lieta di sottoporre alla Vostra attenzione la presente offerta economica. Tutte le voci di seguito elencate sono comprese nell'importo totale indicato a fondo documento.`,
-            size: 20,
-          })],
-          spacing: { after: 300 },
+          children: [run(
+            `In riferimento ai contatti intercorsi e su Vs. richiesta, Athena Next Gen S.r.l. è lieta di sottoporre alla Vostra attenzione la presente offerta economica. L'offerta comprende tutte le lavorazioni indicate nella tabella seguente.`,
+            { size:20 }
+          )],
           alignment: AlignmentType.JUSTIFIED,
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [run('Le voci di seguito elencate sono tutte comprese nell\'importo totale indicato a fondo documento.', { size:19, italic:true })],
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { after: 280 },
         }),
 
         // Tabella voci
@@ -276,120 +322,149 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
         // Nota IVA
         new Paragraph({
-          children: [new TextRun({
-            text: isPrivato && ivaPerc
+          children: [run(
+            isPrivato && ivaPerc
               ? `Il totale è da intendersi come importo imponibile. IVA ${ivaPerc}% pari a ${fmt(totale * ivaPerc / 100)} — Totale con IVA: ${fmt(totale + totale * ivaPerc / 100)}.`
               : `Il totale complessivo è da intendersi come importo imponibile. L'IVA sarà applicata nelle aliquote di legge vigenti e dettagliata in sede di fatturazione.`,
-            size: 18, italics: true, color: '64748b',
-          })],
-          spacing: { before: 120, after: 300 },
+            { italic:true, size:18, color:GREY }
+          )],
+          spacing: { before:140, after:320 },
         }),
 
         // Condizioni di pagamento
-        sectionTitle('Condizioni e termini di pagamento'),
         new Paragraph({
-          children: [new TextRun({ text: 'Il corrispettivo sarà corrisposto nelle seguenti tranches, previa ricezione di regolare fattura, a mezzo bonifico bancario sulle coordinate indicate in fattura:', size: 20 })],
-          spacing: { after: 160 },
+          children: [run('CONDIZIONI E TERMINI DI PAGAMENTO', { bold:true, size:20, color:BLUE })],
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
+          spacing: { before:280, after:160 },
+        }),
+        new Paragraph({
+          children: [run('Il corrispettivo sarà corrisposto nelle seguenti tranches, previa ricezione di regolare fattura, a mezzo bonifico bancario:', { size:20 })],
           alignment: AlignmentType.JUSTIFIED,
+          spacing: { after:160 },
         }),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: trancheRows,
-        }),
+        new Table({ width: { size:100, type:WidthType.PERCENTAGE }, rows: trancheRows }),
         new Paragraph({
-          children: [new TextRun({ text: 'Attenzione: le lavorazioni avranno inizio esclusivamente a seguito del ricevimento dell\'acconto sul conto corrente bancario indicato in fattura.', size: 18, bold: true })],
-          spacing: { before: 160, after: 200 },
+          children: [run('Attenzione: le lavorazioni avranno inizio esclusivamente a seguito del ricevimento dell\'acconto sul conto corrente bancario indicato in fattura.', { bold:true, size:18 })],
+          spacing: { before:160, after:200 },
         }),
 
         // Attività incluse
-        sectionTitle('Attività incluse nell\'offerta'),
-        new Paragraph({ children: [new TextRun({ text: '• Tutte le voci elencate nella tabella computo metrico estimativo di cui sopra.', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• n. 1 sopralluogo tecnico preliminare per verifica stato dei luoghi.', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Gestione completa delle comunicazioni con enti (GSE, Comune, Distributore, Terna).', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Il totale è comprensivo di spese di trasferta, bolli tecnici e ogni onere accessorio del Fornitore.', size: 20 })], spacing: { after: 80 } }),
+        new Paragraph({
+          children: [run('ATTIVITÀ INCLUSE NELL\'OFFERTA', { bold:true, size:20, color:BLUE })],
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
+          spacing: { before:280, after:120 },
+        }),
+        ...bulletClausola([
+          'Tutte le voci elencate nella tabella computo metrico estimativo di cui sopra.',
+          'n. 1 sopralluogo tecnico preliminare per verifica stato dei luoghi.',
+          'Gestione completa delle comunicazioni con enti (GSE, Comune, Distributore, Terna).',
+          'Il totale è comprensivo di spese di trasferta, bolli tecnici e ogni onere accessorio del Fornitore.',
+        ]),
 
         // Attività escluse
-        sectionTitle('Attività escluse dall\'offerta'),
-        new Paragraph({ children: [new TextRun({ text: '• Oneri a carico del Committente: bolli catastali, diritti di segreteria, tasse comunali/regionali, oneri ENEL.', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Opere di bonifica terreno, rimozione ostacoli preesistenti o lavori di urbanizzazione non indicati.', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Allacciamento fisico alla rete di distribuzione MT (a cura del gestore Enel Distribuzione / Terna).', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Procedure AU (Autorizzazione Unica), PAUR o VIA, qualora si rendessero necessarie: quotate separatamente.', size: 20 })], spacing: { after: 80 } }),
+        new Paragraph({
+          children: [run('ATTIVITÀ ESCLUSE DALL\'OFFERTA', { bold:true, size:20, color:BLUE })],
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
+          spacing: { before:280, after:120 },
+        }),
+        ...bulletClausola([
+          'Oneri a carico del Committente: bolli catastali, diritti di segreteria, tasse comunali/regionali, oneri ENEL.',
+          'Opere di bonifica terreno, rimozione ostacoli preesistenti o lavori di urbanizzazione non indicati.',
+          'Allacciamento fisico alla rete di distribuzione MT (a cura del gestore Enel Distribuzione / Terna).',
+          'Sistema di accumulo energetico (batterie), se non espressamente concordato.',
+          'Procedure AU (Autorizzazione Unica), PAUR o VIA, qualora si rendessero necessarie: quotate separatamente.',
+          'Procedure vincolistiche (paesaggistiche, idrogeologiche, Natura 2000) se non incluse nella PAS.',
+        ]),
 
         // Documentazione preliminare
-        sectionTitle('Documentazione preliminare da fornire dal Committente'),
-        new Paragraph({ children: [new TextRun({ text: '• Planimetria catastale e aerofotogrammetrica dell\'area di installazione.', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Visura catastale aggiornata del fondo (proprietà o disponibilità dell\'area).', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Accesso al sito per sopralluogo tecnico e rilievo.', size: 20 })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '• Documentazione catastale e urbanistica dell\'area (PRG, destinazione d\'uso, vincoli noti).', size: 20 })], spacing: { after: 80 } }),
+        new Paragraph({
+          children: [run('DOCUMENTAZIONE PRELIMINARE DA FORNIRE DAL COMMITTENTE', { bold:true, size:20, color:BLUE })],
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
+          spacing: { before:280, after:120 },
+        }),
+        ...bulletClausola([
+          'Planimetria catastale e aerofotogrammetrica dell\'area di installazione.',
+          'Visura catastale aggiornata del fondo (proprietà o disponibilità dell\'area).',
+          'Eventuale autorizzazione/permesso già ottenuto o in corso.',
+          'Accesso al sito per sopralluogo tecnico e rilievo.',
+          'Rilievi topografici o sondaggi geognostici già eseguiti (se disponibili).',
+          'Documentazione catastale e urbanistica dell\'area (PRG, destinazione d\'uso, vincoli noti).',
+        ]),
 
-        // Clausole standard
-        ...clausola('Integrazioni e varianti',
+        // Clausole
+        ...clausola('INTEGRAZIONI E VARIANTI',
           'Una volta avviati i lavori, eventuali modifiche o varianti rispetto alle lavorazioni descritte, superiori a n. 1 revisione concordata, formeranno oggetto di separato accordo sulla base di un nuovo preventivo e relativo ordine di modifica scritto.'),
 
-        ...clausola(`Validità del preventivo`,
-          `Il presente preventivo ha validità ${p2.validita_giorni || 20} (${numToWords(p2.validita_giorni || 20)}) giorni dalla data di emissione. Salvo errori e/o omissioni. Scaduto tale termine, Athena Next Gen S.r.l. si riserva il diritto di aggiornare le condizioni economiche in funzione delle variazioni dei costi dei materiali e della disponibilità delle risorse.`),
+        ...clausola(`VALIDITÀ DEL PREVENTIVO`,
+          `Il presente preventivo ha validità ${prev.validita_giorni||20} (${numToWords(prev.validita_giorni||20)}) giorni dalla data di emissione. Salvo errori e/o omissioni. Scaduto tale termine, Athena Next Gen S.r.l. si riserva il diritto di aggiornare le condizioni economiche in funzione delle variazioni dei costi dei materiali e della disponibilità delle risorse.`),
 
-        ...clausola('Sospensione, recesso e risoluzione',
-          'Il Committente potrà, a propria discrezione e dandone comunicazione scritta tramite PEC a studiotecnicoathena@legalmail.it, richiedere la sospensione temporanea delle lavorazioni. In tal caso il Committente corrisponderà il compenso per le lavorazioni eseguite e i materiali già approvvigionati. Il Committente potrà recedere in qualsiasi momento, restando tenuto a rimborsare le spese sostenute e le lavorazioni già eseguite.'),
+        ...clausola('SOSPENSIONE, RECESSO E RISOLUZIONE',
+          'Il Committente potrà, a propria discrezione e dandone comunicazione scritta tramite PEC a studiotecnicoathena@legalmail.it, richiedere la sospensione temporanea delle lavorazioni. In tal caso il Committente corrisponderà il compenso per le lavorazioni eseguite e i materiali già approvvigionati. Il Committente potrà recedere in qualsiasi momento, restando tenuto a rimborsare le spese sostenute e le lavorazioni già eseguite. Qualora il ritardo nei pagamenti si protragga oltre il termine pattuito, Athena Next Gen S.r.l. ha facoltà di risolvere il contratto tramite PEC, con riserva di ulteriori azioni.'),
 
-        ...clausola('Diritto d\'autore',
+        ...clausola('DIRITTO D\'AUTORE',
           'La proprietà intellettuale e i diritti d\'autore relativi ai progetti e agli elaborati tecnici prodotti da Athena Next Gen S.r.l. sono riservati all\'autore anche dopo il pagamento del corrispettivo. Il Committente è tenuto a citare il nome dell\'autore in ogni pubblicazione degli elaborati.'),
 
-        ...clausola('Controversie',
+        ...clausola('CONTROVERSIE',
           'Per tutte le controversie che dovessero insorgere in relazione all\'interpretazione, esecuzione e risoluzione del presente contratto sarà competente in via esclusiva il Foro di Roma.'),
 
-        ...clausola('Disposizioni finali e privacy',
+        ...clausola('DISPOSIZIONI FINALI E PRIVACY',
           'Per quanto non esplicitamente indicato si fa riferimento al Codice Civile artt. 1655 e ss. (appalto) e alle disposizioni di legge applicabili. Con la sottoscrizione, le parti autorizzano reciprocamente il trattamento dei dati personali ai sensi del D.Lgs. 196/2003 e del GDPR (Reg. UE 2016/679), per le sole finalità connesse all\'esecuzione del contratto.'),
 
         // Firma
-        sectionTitle('Per accettazione'),
         new Paragraph({
-          children: [new TextRun({ text: 'Il Cliente dichiara di aver ricevuto tutte le informazioni necessarie e di accettare integralmente la presente proposta commerciale.', size: 20 })],
-          spacing: { after: 320 },
+          children: [run('PER ACCETTAZIONE', { bold:true, size:20, color:BLUE })],
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
+          spacing: { before:280, after:160 },
+        }),
+        new Paragraph({
+          children: [run('Il Cliente dichiara di aver ricevuto tutte le informazioni necessarie e di accettare integralmente la presente proposta commerciale.', { size:20 })],
           alignment: AlignmentType.JUSTIFIED,
+          spacing: { after:320 },
         }),
 
         new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          borders: { top: { style: BorderStyle.NONE, size: 0 }, bottom: { style: BorderStyle.NONE, size: 0 }, left: { style: BorderStyle.NONE, size: 0 }, right: { style: BorderStyle.NONE, size: 0 }, insideH: { style: BorderStyle.NONE, size: 0 }, insideV: { style: BorderStyle.NONE, size: 0 } },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({
-                  children: [
-                    new Paragraph({ children: [new TextRun({ text: 'Committente / Ragione Sociale:', bold: true, size: 18 })], spacing: { after: 40 } }),
-                    new Paragraph({ children: [new TextRun({ text: cliente?.ragione_sociale || '_____________________________________________', size: 18 })], spacing: { after: 200 } }),
-                    new Paragraph({ children: [new TextRun({ text: 'C.F. / P.IVA:', bold: true, size: 18 })], spacing: { after: 40 } }),
-                    new Paragraph({ children: [new TextRun({ text: cliente?.piva || '_____________________________________________', size: 18 })], spacing: { after: 200 } }),
-                    new Paragraph({ children: [new TextRun({ text: 'SDI / PEC:', bold: true, size: 18 })], spacing: { after: 40 } }),
-                    new Paragraph({ children: [new TextRun({ text: cliente?.pec || '_____________________________________________', size: 18 })], spacing: { after: 300 } }),
-                    new Paragraph({ children: [new TextRun({ text: 'Timbro e firma per accettazione', bold: true, size: 18 })], spacing: { after: 40 } }),
-                    new Paragraph({ children: [new TextRun({ text: '_____________________________________________', size: 18 })] }),
-                  ],
-                  borders: BORDER_NONE,
-                }),
-                new TableCell({
-                  children: [
-                    new Paragraph({ children: [new TextRun({ text: 'Luogo e data:', bold: true, size: 18 })], spacing: { after: 40 } }),
-                    new Paragraph({ children: [new TextRun({ text: '___________________________', size: 18 })], spacing: { after: 200 } }),
-                    new Paragraph({ children: [] }),
-                    new Paragraph({ children: [] }),
-                    new Paragraph({ children: [] }),
-                    new Paragraph({ children: [] }),
-                    new Paragraph({ children: [new TextRun({ text: 'Per Athena Next Gen S.r.l.', bold: true, size: 18 })], spacing: { after: 40 } }),
-                    new Paragraph({ children: [new TextRun({ text: '___________________________', size: 18 })] }),
-                  ],
-                  borders: BORDER_NONE,
-                }),
-              ],
-            }),
-          ],
+          width: { size:100, type:WidthType.PERCENTAGE },
+          borders: { top:{style:BorderStyle.NONE,size:0}, bottom:{style:BorderStyle.NONE,size:0}, left:{style:BorderStyle.NONE,size:0}, right:{style:BorderStyle.NONE,size:0}, insideH:{style:BorderStyle.NONE,size:0}, insideV:{style:BorderStyle.NONE,size:0} },
+          rows: [new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  para([run('Committente / Ragione Sociale:', { bold:true, size:18 })], { after:40 }),
+                  para([run(cliente?.ragione_sociale || '_____________________________________________', { size:18 })], { after:200 }),
+                  para([run('C.F. / P.IVA:', { bold:true, size:18 })], { after:40 }),
+                  para([run(cliente?.piva || '_____________________________________________', { size:18 })], { after:200 }),
+                  para([run('SDI / PEC:', { bold:true, size:18 })], { after:40 }),
+                  para([run(cliente?.pec || '_____________________________________________', { size:18 })], { after:300 }),
+                  para([run('Timbro e firma per accettazione', { bold:true, size:18 })], { after:40 }),
+                  para([run('_____________________________________________', { size:18 })]),
+                ],
+                borders: NO_BORDER,
+              }),
+              new TableCell({
+                children: [
+                  para([run('Luogo e data:', { bold:true, size:18 })], { after:40 }),
+                  para([run('___________________________', { size:18 })], { after:300 }),
+                  para([run('')]),
+                  para([run('')]),
+                  para([run('')]),
+                  para([run('')]),
+                  para([run('Per Athena Next Gen S.r.l.', { bold:true, size:18 })], { after:40 }),
+                  para([run('___________________________', { size:18 })]),
+                ],
+                borders: NO_BORDER,
+              }),
+            ],
+          })],
         }),
 
-        ...(p2.note ? [
-          new Paragraph({ children: [], spacing: { after: 200 } }),
-          sectionTitle('Note'),
-          new Paragraph({ children: [new TextRun({ text: p2.note, size: 20 })], alignment: AlignmentType.JUSTIFIED }),
+        ...(prev.note ? [
+          para([run('')], { after:200 }),
+          new Paragraph({
+            children: [run('NOTE', { bold:true, size:20, color:BLUE })],
+            border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
+            spacing: { before:200, after:120 },
+          }),
+          para([run(prev.note, { size:20 })]),
         ] : []),
       ],
     }],
@@ -400,15 +475,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   return new NextResponse(buffer, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'Content-Disposition': `attachment; filename="${p2.numero_offerta || 'preventivo'}.docx"`,
+      'Content-Disposition': `attachment; filename="${prev.numero_offerta||'preventivo'}.docx"`,
     },
   })
-}
-
-function numToWords(n: number): string {
-  const map: Record<number, string> = {
-    7: 'sette', 10: 'dieci', 14: 'quattordici', 15: 'quindici',
-    20: 'venti', 30: 'trenta', 60: 'sessanta', 90: 'novanta',
-  }
-  return map[n] || String(n)
 }
