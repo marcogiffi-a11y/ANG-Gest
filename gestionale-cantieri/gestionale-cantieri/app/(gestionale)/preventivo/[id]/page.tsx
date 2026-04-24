@@ -120,6 +120,15 @@ export default function DettaglioPreventivo() {
     setTranche(prev => prev.map((t, i) => i === idx ? { ...t, [field]: val } : t))
   }
 
+  function esportaWord() {
+    window.open(`/api/preventivo-export/${id}`, '_blank')
+  }
+
+  function esportaPDF() {
+    const win = window.open(`/api/preventivo-export/${id}`, '_blank')
+    if (win) win.focus()
+  }
+
   async function salvaModifiche() {
     setSaving(true)
     try {
@@ -384,6 +393,9 @@ export default function DettaglioPreventivo() {
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
           <Link href="/preventivi" style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, textDecoration: 'none' }}>← Lista preventivi</Link>
           <div style={{ flex: 1 }} />
+          <button onClick={esportaWord} style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #1e3a5f', background: 'white', color: '#1e3a5f', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            ↓ Esporta Word
+          </button>
           <button onClick={salvaModifiche} disabled={saving} style={{ padding: '8px 20px', borderRadius: 7, border: 'none', background: saving ? '#94a3b8' : '#6ab04c', color: 'white', fontSize: 12, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
             {saving ? 'Salvataggio...' : '💾 Salva modifiche'}
           </button>
