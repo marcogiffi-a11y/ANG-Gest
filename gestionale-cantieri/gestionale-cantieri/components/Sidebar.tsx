@@ -8,6 +8,8 @@ import Image from 'next/image'
 const navItems = [
   { section: 'Principale' },
   { href: '/dashboard',    label: 'Dashboard',      icon: '▦' },
+  { href: '/preventivi',   label: 'Preventivi',     icon: '📝' },
+  { href: '/ordini',       label: 'Ordini',          icon: '📄' },
   { href: '/progetti',     label: 'Progetti',        icon: '≡' },
   { href: '/fatture',      label: 'Fatture & SAL',   icon: '📋', dot: true },
   { href: '/scadenze',     label: 'Scadenze',        icon: '📅' },
