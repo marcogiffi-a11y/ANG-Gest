@@ -68,3 +68,43 @@ export type ServizioIngegneria = {
   nome: string
   ordine: number
 }
+
+// ---- PREVENTIVI ----
+
+export type StatoPreventivo = 'bozza' | 'inviato' | 'in_attesa' | 'accettato' | 'rifiutato' | 'scaduto'
+export type TipoCliente = 'privato' | 'ente' | 'altro'
+
+export type Preventivo = {
+  id: string
+  numero_offerta: string
+  data_emissione: string
+  validita_giorni: number
+  stato: StatoPreventivo
+  cliente_id?: string
+  cliente?: Cliente
+  oggetto?: string
+  tipo_servizio?: TipoServizio
+  tipo_cliente?: TipoCliente
+  iva_percentuale?: number
+  note?: string
+  created_at: string
+  preventivo_voci?: PreventivoVoce[]
+  preventivo_tranche?: PreventivoTranche[]
+}
+
+export type PreventivoVoce = {
+  id: string
+  preventivo_id: string
+  sezione: string
+  descrizione: string
+  importo: number
+  ordine: number
+}
+
+export type PreventivoTranche = {
+  id: string
+  preventivo_id: string
+  descrizione: string
+  percentuale: number
+  ordine: number
+}
