@@ -114,6 +114,291 @@ function loadImg(filename: string): Buffer | null {
   }
 }
 
+// ── Modelli computo metrico per tipologia impianto ────────────────────────────
+//
+// Fonte: modelli Word ufficiali ANG (MODELLO_INFERIORE_11_KW.docx, ecc.)
+// I campi XXX nel modello originale diventano "A Corpo" nell'export.
+// La norma di interfaccia cambia: CEI 0-21 per P ≤ 100 kW, CEI 0-16 per P > 100 kW.
+//
+type ComputometricoRow = { descrizione: string; unita: string }
+
+const MODELLI_COMPUTO: Record<string, ComputometricoRow[]> = {
+
+  // ── P < 11 kW ── CEI 0-21 | Accumulo non incluso ───────────────────────────
+  lt_11kw: [
+    {
+      descrizione: 'Fornitura in opera di impianto a moduli fotovoltaici monocristallini (vedi schede tecniche allegate o moduli equivalenti con medesime caratteristiche)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di idonee strutture di fissaggio in funzione del tipo di copertura',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di inverter',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di interfaccia completo di interruttore generale, scaricatore di tensione, dispositivo di interfaccia CEI 0-21, DDI per distacco impianto. Taratura e certificazione con esecuzione autotest con cassetta prova relè certificata CEI 0-21',
+      unita: 'Per impianti superiori a 11,08 kWp',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di campo, completo di scaricatori e sezionatore DC',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di tubazioni e cavi di stringa per collegamento campo fotovoltaico a quadro di stringa (cavi solari FF2H1Z2Z2K16R, 6 mmq)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavo gommato FG16OR per collegamento del quadro al quadro generale esistente',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di sistema di accumulo fotovoltaico',
+      unita: '— (non incluso)',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavi di potenza e segnale per assemblaggio componenti',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: "Completamento delle opere e messa in funzione dell'impianto",
+      unita: '1',
+    },
+    {
+      descrizione: 'Assistenza sul posto per sopralluogo tecnici della Soc. gestore di energia e per allaccio finale impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Schema unifilare di impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Redazione ove necessario di Piano di sicurezza e coordinamento PSC',
+      unita: '1',
+    },
+    {
+      descrizione: 'Direzione Lavori',
+      unita: '1',
+    },
+    {
+      descrizione: 'Pratica di allaccio presso ente di distribuzione e GSE',
+      unita: '1',
+    },
+  ],
+
+  // ── 11 kW < P < 20 kW ── CEI 0-21 | Accumulo incluso ──────────────────────
+  bt_11_20kw: [
+    {
+      descrizione: 'Fornitura in opera di impianto a moduli fotovoltaici monocristallini (vedi schede tecniche allegate o moduli equivalenti con medesime caratteristiche)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di idonee strutture di fissaggio in funzione del tipo di copertura',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di inverter',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di interfaccia completo di interruttore generale, scaricatore di tensione, dispositivo di interfaccia CEI 0-21, DDI per distacco impianto. Taratura e certificazione con esecuzione autotest con cassetta prova relè certificata CEI 0-21',
+      unita: 'Per impianti superiori a 11,08 kWp',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di campo, completo di scaricatori e sezionatore DC',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di tubazioni e cavi di stringa per collegamento campo fotovoltaico a quadro di stringa (cavi solari FF2H1Z2Z2K16R, 6 mmq)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavo gommato FG16OR per collegamento del quadro al quadro generale esistente',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di sistema di accumulo fotovoltaico',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavi di potenza e segnale per assemblaggio componenti',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: "Completamento delle opere e messa in funzione dell'impianto",
+      unita: '1',
+    },
+    {
+      descrizione: 'Assistenza sul posto per sopralluogo tecnici della Soc. gestore di energia e per allaccio finale impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Schema unifilare di impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Redazione ove necessario di Piano di sicurezza e coordinamento PSC',
+      unita: '1',
+    },
+    {
+      descrizione: 'Direzione Lavori',
+      unita: '1',
+    },
+    {
+      descrizione: 'Pratica di allaccio presso ente di distribuzione e GSE',
+      unita: '1',
+    },
+  ],
+
+  // ── 20 kW < P < 100 kW ── CEI 0-21 | Accumulo incluso | Pratica UTF ────────
+  bt_20_100kw: [
+    {
+      descrizione: 'Fornitura in opera di impianto a moduli fotovoltaici monocristallini (vedi schede tecniche allegate o moduli equivalenti con medesime caratteristiche)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di idonee strutture di fissaggio in funzione del tipo di copertura',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di inverter',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di interfaccia completo di interruttore generale, scaricatore di tensione, dispositivo di interfaccia CEI 0-21, DDI per distacco impianto. Taratura e certificazione con esecuzione autotest con cassetta prova relè certificata CEI 0-21',
+      unita: 'Per impianti superiori a 11,08 kWp',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di campo, completo di scaricatori e sezionatore DC',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di tubazioni e cavi di stringa per collegamento campo fotovoltaico a quadro di stringa (cavi solari FF2H1Z2Z2K16R, 6 mmq)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavo gommato FG16OR per collegamento del quadro al quadro generale esistente',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura e posa in opera di sistema di accumulo fotovoltaico',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavi di potenza e segnale per assemblaggio componenti',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: "Completamento delle opere e messa in funzione dell'impianto",
+      unita: '1',
+    },
+    {
+      descrizione: 'Assistenza sul posto per sopralluogo tecnici della Soc. gestore di energia e per allaccio finale impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Schema unifilare di impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Redazione ove necessario di Piano di sicurezza e coordinamento PSC',
+      unita: '1',
+    },
+    {
+      descrizione: 'Pratica UTF presso agenzia delle dogane',
+      unita: '1',
+    },
+    {
+      descrizione: 'Direzione Lavori',
+      unita: '1',
+    },
+    {
+      descrizione: 'Pratica di allaccio presso ente di distribuzione e GSE',
+      unita: '1',
+    },
+  ],
+
+  // ── P > 100 kW ── CEI 0-16 | Cabina MT/BT | Pratica UTF ───────────────────
+  gt_100kw: [
+    {
+      descrizione: 'Fornitura in opera di impianto a moduli fotovoltaici monocristallini (vedi schede tecniche allegate o moduli equivalenti con medesime caratteristiche)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di idonee strutture di fissaggio in funzione del tipo di copertura',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di inverter',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di interfaccia completo di interruttore generale, scaricatore di tensione, dispositivo di interfaccia CEI 0-16, DDI per distacco impianto. Taratura e certificazione con esecuzione autotest con cassetta prova relè certificata CEI 0-16',
+      unita: 'Per impianti superiori a 11,08 kWp',
+    },
+    {
+      descrizione: 'Fornitura in opera di quadro di campo, completo di scaricatori e sezionatore DC',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di tubazioni e cavi di stringa per collegamento campo fotovoltaico a quadro di stringa (cavi solari FF2H1Z2Z2K16R, 6 mmq)',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavo gommato FG16OR per collegamento del quadro al quadro generale esistente',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di sistema di cabina di trasformazione MT/BT comprensiva di piattaforma in cemento armato',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: 'Fornitura in opera di cavi di potenza e segnale per assemblaggio componenti',
+      unita: 'A Corpo',
+    },
+    {
+      descrizione: "Completamento delle opere e messa in funzione dell'impianto",
+      unita: '1',
+    },
+    {
+      descrizione: 'Assistenza sul posto per sopralluogo tecnici della Soc. gestore di energia e per allaccio finale impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Schema unifilare di impianto',
+      unita: '1',
+    },
+    {
+      descrizione: 'Redazione ove necessario di Piano di sicurezza e coordinamento PSC',
+      unita: '1',
+    },
+    {
+      descrizione: 'Pratica UTF presso agenzia delle dogane',
+      unita: '1',
+    },
+    {
+      descrizione: 'Direzione Lavori',
+      unita: '1',
+    },
+    {
+      descrizione: 'Pratica di allaccio presso ente di distribuzione e GSE',
+      unita: '1',
+    },
+  ],
+}
+
+// Label leggibile per il titolo sezione nel Word
+const TIPOLOGIA_SECTION_LABEL: Record<string, string> = {
+  lt_11kw:     'Fornitura e posa in opera — Impianto fotovoltaico P < 11 kW',
+  bt_11_20kw:  'Fornitura e posa in opera — Impianto fotovoltaico 11 kW < P < 20 kW',
+  bt_20_100kw: 'Fornitura e posa in opera — Impianto fotovoltaico 20 kW < P < 100 kW',
+  gt_100kw:    'Fornitura e posa in opera — Impianto fotovoltaico P > 100 kW',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
 
@@ -130,10 +415,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const cliente = prev.clienti as any
   const totale  = voci.reduce((acc: number, v: any) => acc + (v.importo || 0), 0)
   const ivaPerc = prev.iva_percentuale || 0
-  const isPrivato = prev.tipo_cliente === 'privato'
+  const isPrivato   = prev.tipo_cliente === 'privato'
   const isFornitura = prev.tipo_servizio === 'fornitura_posa'
 
-  // Raggruppa voci per sezione
+  // Tipologia impianto (nuovo campo)
+  const tipologiaImpianto: string | null = prev.tipologia_impianto || null
+  const usaModelloFV = isFornitura && tipologiaImpianto && MODELLI_COMPUTO[tipologiaImpianto]
+
+  // Raggruppa voci per sezione (usato solo se NON usa modello FV)
   const sezioniMap: Record<string, any[]> = {}
   for (const v of voci) {
     const s = v.sezione || 'Altre voci'
@@ -213,54 +502,90 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     rows: [makeHeaderRow()],
   })
 
-  // Linea verde sotto header
-  const greenLine = new Paragraph({
-    children: [],
-    border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: GREEN } },
-    spacing: { before: 100, after: 200 },
-  })
-
   // ── Tabella voci ─────────────────────────────────────────────────────────────
-  // Riga header tabella — blu con testo bianco
-  const headerVociRow = new TableRow({
-    children: [
-      cell([para([run('DESCRIZIONE ATTIVITÀ', { bold: true, size: 18, color: WHITE })])],   { bg: BLUE, w: 88 }),
-      cell([para([run('IMPORTO',             { bold: true, size: 18, color: WHITE })], { align: AlignmentType.CENTER })], { bg: BLUE, w: 12 }),
-    ],
-    tableHeader: true,
-  })
+
+  // Header colonne — cambia in base alla presenza del modello FV
+  const headerVociRow = usaModelloFV
+    ? new TableRow({
+        children: [
+          cell([para([run('DESCRIZIONE ATTIVITÀ', { bold: true, size: 18, color: WHITE })])],   { bg: BLUE, w: 85 }),
+          cell([para([run('UNITÀ',                { bold: true, size: 18, color: WHITE })], { align: AlignmentType.CENTER })], { bg: BLUE, w: 15 }),
+        ],
+        tableHeader: true,
+      })
+    : new TableRow({
+        children: [
+          cell([para([run('DESCRIZIONE ATTIVITÀ', { bold: true, size: 18, color: WHITE })])],   { bg: BLUE, w: 88 }),
+          cell([para([run('IMPORTO',              { bold: true, size: 18, color: WHITE })], { align: AlignmentType.CENTER })], { bg: BLUE, w: 12 }),
+        ],
+        tableHeader: true,
+      })
 
   const voceRows: TableRow[] = [headerVociRow]
 
-  for (const [sezione, vociSez] of Object.entries(sezioniMap)) {
-    // Riga sezione — blu scuro
+  if (usaModelloFV) {
+    // ── Modalità modello FV: usa le righe standard del template ──────────────
+    const sectionLabel = TIPOLOGIA_SECTION_LABEL[tipologiaImpianto!] || 'Fornitura e posa in opera — Impianto fotovoltaico'
+    const modelRows    = MODELLI_COMPUTO[tipologiaImpianto!]
+
+    // Riga titolo sezione (sfondo blu)
     voceRows.push(new TableRow({
       children: [
-        cell([para([run(sezione, { bold: true, size: 19, color: WHITE })])], { bg: BLUE, span: 2 }),
+        cell([para([run(sectionLabel, { bold: true, size: 19, color: WHITE })])], { bg: BLUE, span: 2 }),
       ],
     }))
 
-    for (const v of vociSez) {
-      const importoCell = isFornitura
-        ? para([run('a corpo', { italic: true, size: 18, color: GREY })], { align: AlignmentType.CENTER })
-        : para([run(v.importo > 0 ? fmt(v.importo) : 'a corpo', { size: 19 })], { align: AlignmentType.RIGHT })
-
+    // Righe modello — descrizione + unità
+    for (const row of modelRows) {
+      const isNonIncluso = row.unita.startsWith('—')
       voceRows.push(new TableRow({
         children: [
-          cell([para([run(v.descrizione || '', { size: 19 })])]),
-          cell([importoCell]),
+          cell([para([run(row.descrizione, { size: 19, color: isNonIncluso ? GREY : '000000', italic: isNonIncluso })])]),
+          cell([para([run(row.unita, { size: 18, color: isNonIncluso ? GREY : '475569', italic: true })], { align: AlignmentType.CENTER })]),
         ],
       }))
     }
-  }
 
-  // Riga totale
-  voceRows.push(new TableRow({
-    children: [
-      cell([para([run('TOTALE COMPLESSIVO (imponibile IVA esclusa)', { bold: true, size: 20, color: BLUE })], { align: AlignmentType.RIGHT })], { bg: 'f0fbe8' }),
-      cell([para([run(fmt(totale), { bold: true, size: 22, color: BLUE })], { align: AlignmentType.RIGHT })], { bg: 'f0fbe8' }),
-    ],
-  }))
+    // Riga totale complessivo
+    voceRows.push(new TableRow({
+      children: [
+        cell([para([run('TOTALE IVA E ONERI ESCLUSI', { bold: true, size: 20, color: BLUE })], { align: AlignmentType.RIGHT })], { bg: 'f0fbe8' }),
+        cell([para([run(fmt(totale), { bold: true, size: 22, color: BLUE })], { align: AlignmentType.RIGHT })], { bg: 'f0fbe8' }),
+      ],
+    }))
+
+  } else {
+    // ── Modalità classica: usa le voci salvate in preventivo_voci ────────────
+    for (const [sezione, vociSez] of Object.entries(sezioniMap)) {
+      // Riga sezione — blu scuro
+      voceRows.push(new TableRow({
+        children: [
+          cell([para([run(sezione, { bold: true, size: 19, color: WHITE })])], { bg: BLUE, span: 2 }),
+        ],
+      }))
+
+      for (const v of vociSez) {
+        const importoCell = isFornitura
+          ? para([run('a corpo', { italic: true, size: 18, color: GREY })], { align: AlignmentType.CENTER })
+          : para([run(v.importo > 0 ? fmt(v.importo) : 'a corpo', { size: 19 })], { align: AlignmentType.RIGHT })
+
+        voceRows.push(new TableRow({
+          children: [
+            cell([para([run(v.descrizione || '', { size: 19 })])]),
+            cell([importoCell]),
+          ],
+        }))
+      }
+    }
+
+    // Riga totale
+    voceRows.push(new TableRow({
+      children: [
+        cell([para([run('TOTALE COMPLESSIVO (imponibile IVA esclusa)', { bold: true, size: 20, color: BLUE })], { align: AlignmentType.RIGHT })], { bg: 'f0fbe8' }),
+        cell([para([run(fmt(totale), { bold: true, size: 22, color: BLUE })], { align: AlignmentType.RIGHT })], { bg: 'f0fbe8' }),
+      ],
+    }))
+  }
 
   // ── Tabella tranche ───────────────────────────────────────────────────────────
   const trancheHeaderRow = new TableRow({
@@ -364,7 +689,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         // Testo introduttivo
         new Paragraph({
           children: [run(
-            'In riferimento ai contatti intercorsi e su Vs. richiesta, Athena Next Gen S.r.l. è lieta di sottoporre alla Vostra attenzione la presente offerta economica. L\'offerta comprende tutte le lavorazioni indicate nella tabella seguente.',
+            "In riferimento ai contatti intercorsi e su Vs. richiesta, Athena Next Gen S.r.l. è lieta di sottoporre alla Vostra attenzione la presente offerta economica. L'offerta comprende tutte le lavorazioni indicate nella tabella seguente.",
             { size: 20 }
           )],
           alignment: AlignmentType.JUSTIFIED,
@@ -376,7 +701,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           spacing: { after: 280 },
         }),
 
-        // Tabella voci
+        // Tabella voci (modello FV o classica)
         new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: voceRows }),
 
         // Nota IVA
@@ -384,7 +709,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           children: [run(
             isPrivato && ivaPerc
               ? `Il totale è da intendersi come importo imponibile. IVA ${ivaPerc}% pari a ${fmt(totale * ivaPerc / 100)} — Totale con IVA: ${fmt(totale + totale * ivaPerc / 100)}.`
-              : 'Il totale complessivo è da intendersi come importo imponibile. L\'IVA sarà applicata nelle aliquote di legge vigenti e dettagliata in sede di fatturazione.',
+              : "Il totale complessivo è da intendersi come importo imponibile. L'IVA sarà applicata nelle aliquote di legge vigenti e dettagliata in sede di fatturazione.",
             { italic: true, size: 18, color: GREY }
           )],
           spacing: { before: 140, after: 320 },
@@ -399,12 +724,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         }),
         new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: trancheRows }),
         new Paragraph({
-          children: [run('Attenzione: le lavorazioni avranno inizio esclusivamente a seguito del ricevimento dell\'acconto sul conto corrente bancario indicato in fattura.', { bold: true, size: 18 })],
+          children: [run("Attenzione: le lavorazioni avranno inizio esclusivamente a seguito del ricevimento dell'acconto sul conto corrente bancario indicato in fattura.", { bold: true, size: 18 })],
           spacing: { before: 160, after: 200 },
         }),
 
         // Attività incluse
-        sectionTitle('ATTIVITÀ INCLUSE NELL\'OFFERTA'),
+        sectionTitle("ATTIVITÀ INCLUSE NELL'OFFERTA"),
         ...bulletClausola([
           'Tutte le voci elencate nella tabella computo metrico estimativo di cui sopra.',
           'n. 1 sopralluogo tecnico preliminare per verifica stato dei luoghi.',
@@ -413,7 +738,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         ]),
 
         // Attività escluse
-        sectionTitle('ATTIVITÀ ESCLUSE DALL\'OFFERTA'),
+        sectionTitle("ATTIVITÀ ESCLUSE DALL'OFFERTA"),
         ...bulletClausola([
           'Oneri a carico del Committente: bolli catastali, diritti di segreteria, tasse comunali/regionali, oneri ENEL.',
           'Opere di bonifica terreno, rimozione ostacoli preesistenti o lavori di urbanizzazione non indicati.',
@@ -426,7 +751,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         // Documentazione preliminare
         sectionTitle('DOCUMENTAZIONE PRELIMINARE DA FORNIRE DAL COMMITTENTE'),
         ...bulletClausola([
-          'Planimetria catastale e aerofotogrammetrica dell\'area di installazione.',
+          "Planimetria catastale e aerofotogrammetrica dell'area di installazione.",
           'Visura catastale aggiornata del fondo (proprietà o disponibilità dell\'area).',
           'Eventuale autorizzazione/permesso già ottenuto o in corso.',
           'Accesso al sito per sopralluogo tecnico e rilievo.',
@@ -442,11 +767,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         ...clausola('SOSPENSIONE, RECESSO E RISOLUZIONE',
           'Il Committente potrà, a propria discrezione e dandone comunicazione scritta tramite PEC a studiotecnicoathena@legalmail.it, richiedere la sospensione temporanea delle lavorazioni. In tal caso il Committente corrisponderà il compenso per le lavorazioni eseguite e i materiali già approvvigionati. Il Committente potrà recedere in qualsiasi momento, restando tenuto a rimborsare le spese sostenute e le lavorazioni già eseguite.'),
 
-        ...clausola('DIRITTO D\'AUTORE',
-          'La proprietà intellettuale e i diritti d\'autore relativi ai progetti e agli elaborati tecnici prodotti da Athena Next Gen S.r.l. sono riservati all\'autore anche dopo il pagamento del corrispettivo.'),
+        ...clausola("DIRITTO D'AUTORE",
+          "La proprietà intellettuale e i diritti d'autore relativi ai progetti e agli elaborati tecnici prodotti da Athena Next Gen S.r.l. sono riservati all'autore anche dopo il pagamento del corrispettivo."),
 
         ...clausola('CONTROVERSIE',
-          'Per tutte le controversie che dovessero insorgere in relazione all\'interpretazione, esecuzione e risoluzione del presente contratto sarà competente in via esclusiva il Foro di Roma.'),
+          "Per tutte le controversie che dovessero insorgere in relazione all'interpretazione, esecuzione e risoluzione del presente contratto sarà competente in via esclusiva il Foro di Roma."),
 
         ...clausola('DISPOSIZIONI FINALI E PRIVACY',
           'Per quanto non esplicitamente indicato si fa riferimento al Codice Civile artt. 1655 e ss. (appalto) e alle disposizioni di legge applicabili. Con la sottoscrizione, le parti autorizzano reciprocamente il trattamento dei dati personali ai sensi del D.Lgs. 196/2003 e del GDPR (Reg. UE 2016/679).'),
