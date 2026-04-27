@@ -3,7 +3,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/Topbar'
 import { useRouter } from 'next/navigation'
-import type { Cliente, TipoServizio, TipoCliente } from '@/lib/types'
+import type { Cliente, TipoServizio, TipoCliente, TipologiaImpianto } from '@/lib/types'
+import { TIPOLOGIA_LABELS } from '@/lib/types'
 
 // ── Costanti ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,14 @@ const SEZIONI_DEFAULT = [
   ]},
 ]
 
+// Badge colori per tipologia impianto
+const TIPOLOGIA_BADGE: Record<TipologiaImpianto, React.CSSProperties> = {
+  lt_11kw:     { background: '#e6f1fb', color: '#185fa5' },
+  bt_11_20kw:  { background: '#eeedfe', color: '#534ab7' },
+  bt_20_100kw: { background: '#faeeda', color: '#854f0b' },
+  gt_100kw:    { background: '#f0f9ea', color: '#3b6d11' },
+}
+
 // ── Tipi locali ───────────────────────────────────────────────────────────────
 
 type Voce    = { sezione: string; descrizione: string; importo: number }
@@ -84,8 +93,10 @@ export default function NuovoPreventivoPage() {
   const [loading, setLoading] = useState(false)
 
   // ── Step 0 ───────────────────────────────────────────────────────────────────
-  const [tipoServizio, setTipoServizio] = useState<TipoServizio | null>(null)
-  const [tipoCliente,  setTipoCliente]  = useState<TipoCliente  | null>(null)
+  const [tipoServizio,      setTipoServizio]      = useState<TipoServizio | null>(null)
+  const [tipoCliente,       setTipoCliente]       = useState<TipoCliente  | null>(null)
+  const [tipologiaImpianto, setTipologiaImpianto] = useState<TipologiaImpianto | null>(null)
+  const [errTipologia,      setErrTipologia]      = useState(false)
 
   // ── Step 1 — Calcolatore FV (Excel-based) ────────────────────────────────────
 
@@ -233,6 +244,16 @@ export default function NuovoPreventivoPage() {
 
   function procedi() {
     if (!tipoServizio || !tipoCliente) return
+
+    // Validazione tipologia impianto (obbligatoria per fornitura_posa)
+    if (tipoServizio === 'fornitura_posa' && !tipologiaImpianto) {
+      setErrTipologia(true)
+      const el = document.getElementById('box-tipologia')
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    setErrTipologia(false)
+
     if (tipoServizio === 'fornitura_posa') {
       setStep(1)
     } else {
@@ -322,16 +343,17 @@ export default function NuovoPreventivoPage() {
     setLoading(true)
     try {
       const { data: prev, error } = await supabase.from('preventivi').insert({
-        numero_offerta:  numeroOfferta,
-        data_emissione:  dataEmissione,
-        validita_giorni: validitaGiorni,
-        stato:           statoPreventivo,
-        cliente_id:      clienteSelezionato?.id || null,
-        oggetto:         oggetto || null,
-        tipo_servizio:   tipoServizio,
-        tipo_cliente:    tipoCliente,
-        iva_percentuale: tipoCliente === 'privato' ? ivaPerc : null,
-        note:            note || null,
+        numero_offerta:     numeroOfferta,
+        data_emissione:     dataEmissione,
+        validita_giorni:    validitaGiorni,
+        stato:              statoPreventivo,
+        cliente_id:         clienteSelezionato?.id || null,
+        oggetto:            oggetto || null,
+        tipo_servizio:      tipoServizio,
+        tipo_cliente:       tipoCliente,
+        tipologia_impianto: tipologiaImpianto || null,   // ← NUOVO
+        iva_percentuale:    tipoCliente === 'privato' ? ivaPerc : null,
+        note:               note || null,
       }).select().single()
 
       if (error || !prev) throw error
@@ -426,6 +448,7 @@ export default function NuovoPreventivoPage() {
         {/* ══════════════ STEP 0 — TIPO SERVIZIO / CLIENTE ══════════════ */}
         {step === 0 && (
           <div>
+            {/* Tipo servizio */}
             <div style={card}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>Tipo di servizio</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -433,7 +456,7 @@ export default function NuovoPreventivoPage() {
                   ['ingegneria',     '📐', 'Servizi di ingegneria',     'Progettazione, DL, collaudo, perizie, autorizzazioni'],
                   ['fornitura_posa', '⚡', 'Fornitura e posa in opera', 'Fornitura materiali + installazione impianti'],
                 ] as const).map(([val, icon, label, sub]) => (
-                  <div key={val} onClick={() => setTipoServizio(val)} style={{
+                  <div key={val} onClick={() => { setTipoServizio(val); if (val === 'ingegneria') setTipologiaImpianto(null) }} style={{
                     border: tipoServizio === val ? '2px solid #6ab04c' : '2px solid #e2e8f0',
                     background: tipoServizio === val ? '#f0fdf4' : 'white',
                     borderRadius: 10, padding: 18, cursor: 'pointer', textAlign: 'center',
@@ -448,6 +471,7 @@ export default function NuovoPreventivoPage() {
               </div>
             </div>
 
+            {/* Tipo cliente */}
             <div style={card}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>Tipo di cliente</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
@@ -471,6 +495,69 @@ export default function NuovoPreventivoPage() {
               </div>
             </div>
 
+            {/* ── TIPOLOGIA IMPIANTO — visibile solo per fornitura_posa ── */}
+            {tipoServizio === 'fornitura_posa' && (
+              <div id="box-tipologia" style={{
+                ...card,
+                border: errTipologia ? '2px solid #f87171' : '1px solid rgba(106,176,76,.4)',
+                background: '#fafff6',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Tipologia di impianto</div>
+                  <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: '#dcfce7', color: '#166534' }}>
+                    obbligatoria
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 14 }}>
+                  Seleziona la fascia di potenza nominale — determina il modello di computo metrico nel documento Word esportato
+                </div>
+
+                {(Object.entries(TIPOLOGIA_LABELS) as [TipologiaImpianto, typeof TIPOLOGIA_LABELS[TipologiaImpianto]][]).map(([val, info]) => (
+                  <div
+                    key={val}
+                    onClick={() => { setTipologiaImpianto(val); setErrTipologia(false) }}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 12,
+                      padding: '10px 14px', borderRadius: 8, cursor: 'pointer', marginBottom: 6,
+                      border: tipologiaImpianto === val ? '2px solid #6ab04c' : '1.5px solid #e2e8f0',
+                      background: tipologiaImpianto === val ? '#f0fdf4' : 'white',
+                      boxShadow: tipologiaImpianto === val ? '0 0 0 3px rgba(106,176,76,.1)' : 'none',
+                      transition: 'all .15s',
+                    }}
+                  >
+                    {/* Checkbox simulata */}
+                    <div style={{
+                      width: 17, height: 17, borderRadius: 4, flexShrink: 0, marginTop: 2,
+                      border: tipologiaImpianto === val ? '2px solid #6ab04c' : '2px solid #d1d5db',
+                      background: tipologiaImpianto === val ? '#6ab04c' : 'white',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {tipologiaImpianto === val && (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                        {info.label}
+                        <span style={{ fontSize: 10, padding: '1px 8px', borderRadius: 12, fontWeight: 500, ...TIPOLOGIA_BADGE[val] }}>
+                          {info.range}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>{info.note}</div>
+                    </div>
+                  </div>
+                ))}
+
+                {errTipologia && (
+                  <div style={{ fontSize: 11, color: '#991b1b', marginTop: 8, padding: '6px 10px', background: '#fee2e2', borderRadius: 6 }}>
+                    ⚠ Seleziona la tipologia di impianto per procedere
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button onClick={() => router.push('/preventivi')} style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, cursor: 'pointer' }}>Annulla</button>
               <button onClick={procedi} disabled={!tipoServizio || !tipoCliente} style={{
@@ -488,6 +575,21 @@ export default function NuovoPreventivoPage() {
         {/* ══════════════ STEP 1 — CALCOLATORE FV (Excel-based) ══════════════ */}
         {step === 1 && (
           <div>
+
+            {/* Badge tipologia selezionata */}
+            {tipologiaImpianto && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 14px', borderRadius: 8, background: '#f0fdf4', border: '1px solid rgba(106,176,76,.3)' }}>
+                <span style={{ fontSize: 11, color: '#166534' }}>
+                  Modello computo metrico:
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20, ...TIPOLOGIA_BADGE[tipologiaImpianto] }}>
+                  {TIPOLOGIA_LABELS[tipologiaImpianto].label} — {TIPOLOGIA_LABELS[tipologiaImpianto].range}
+                </span>
+                <button onClick={() => setStep(0)} style={{ fontSize: 10, color: '#6ab04c', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', marginLeft: 'auto' }}>
+                  Cambia tipologia
+                </button>
+              </div>
+            )}
 
             {/* KPI strip */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
@@ -718,13 +820,18 @@ export default function NuovoPreventivoPage() {
         {step === 2 && (
           <div>
             {/* Badge */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: isFornitura ? '#fff3e0' : '#dbeafe', color: isFornitura ? '#92400e' : '#1d4ed8' }}>
                 {isFornitura ? 'Fornitura e posa' : 'Ingegneria'}
               </span>
               <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: tipoCliente === 'privato' ? '#dcfce7' : '#f1f5f9', color: tipoCliente === 'privato' ? '#166534' : '#475569' }}>
                 {tipoCliente === 'privato' ? 'Privato' : tipoCliente === 'ente' ? 'Ente pubblico' : 'Altro soggetto'}
               </span>
+              {tipologiaImpianto && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, ...TIPOLOGIA_BADGE[tipologiaImpianto] }}>
+                  {TIPOLOGIA_LABELS[tipologiaImpianto].label} · {TIPOLOGIA_LABELS[tipologiaImpianto].range}
+                </span>
+              )}
               <button onClick={() => setStep(0)} style={{ fontSize: 11, color: '#6ab04c', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Cambia selezione</button>
               {isFornitura && (
                 <button onClick={() => setStep(1)} style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>← Modifica costi</button>
