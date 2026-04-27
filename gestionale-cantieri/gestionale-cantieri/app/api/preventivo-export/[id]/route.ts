@@ -148,9 +148,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const imgEge      = loadImg('logo-ege.jpg')
   const imgSerif    = loadImg('logo-serif.jpg')
 
-  // ── Intestazione: 3 celle — logo | testo | certificazioni ────────────────────
+  // ── Intestazione: 3 celle — logo | certificazioni | testo ───────────────────
   function makeHeaderRow(): TableRow {
-    // Cella 1 — Logo ANG
+    // Cella 1 — Logo ANG (sinistra)
     const cellLogo = new TableCell({
       children: imgAng ? [new Paragraph({
         children: [new ImageRun({ data: imgAng, transformation: { width: 85, height: 85 }, type: 'jpg' })],
@@ -162,42 +162,42 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       verticalAlign: VerticalAlign.CENTER,
     })
 
-    // Cella 2 — Testo aziendale
-    const cellText = new TableCell({
-      children: [
-        para([run('Società di Ingegneria', { bold: true, size: 20, color: BLUE })], { after: 30 }),
-        para([run('Progettazione Impianti', { size: 18, italic: true, color: GREY })], { after: 20 }),
-        para([run('Soluzioni per efficientamento energetico', { size: 18, italic: true, color: GREY })], { after: 20 }),
-        para([run('Pratiche edilizie e progettazioni strutturali', { size: 18, italic: true, color: GREY })], { after: 20 }),
-        para([run('Installazione Impianti da fonti rinnovabili', { size: 18, italic: true, color: GREY })], { after: 0 }),
-      ],
-      width: { size: 40, type: WidthType.PERCENTAGE },
-      borders: NO_BORDER,
-      margins: { top: 0, bottom: 0, left: 200, right: 200 },
-      verticalAlign: VerticalAlign.CENTER,
-    })
-
-    // Cella 3 — Loghi certificazioni
+    // Cella 2 — Loghi certificazioni (centro)
     const certChildren: Paragraph[] = []
     const certRow: ImageRun[] = []
     if (imgIso9001)  certRow.push(new ImageRun({ data: imgIso9001,  transformation: { width: 55, height: 55 }, type: 'jpg' }))
     if (imgIso14001) certRow.push(new ImageRun({ data: imgIso14001, transformation: { width: 55, height: 55 }, type: 'jpg' }))
     if (imgEge)      certRow.push(new ImageRun({ data: imgEge,      transformation: { width: 85, height: 60 }, type: 'jpg' }))
     if (certRow.length > 0) {
-      certChildren.push(new Paragraph({ children: certRow, alignment: AlignmentType.RIGHT }))
+      certChildren.push(new Paragraph({ children: certRow, alignment: AlignmentType.CENTER }))
     } else {
-      certChildren.push(para([run('ISO 9001 · ISO 14001 · EGE', { size: 16, color: GREY })]))
+      certChildren.push(para([run('ISO 9001 · ISO 14001 · EGE', { size: 16, color: GREY })], { align: AlignmentType.CENTER }))
     }
 
     const cellCerts = new TableCell({
       children: certChildren,
       width: { size: 40, type: WidthType.PERCENTAGE },
       borders: NO_BORDER,
+      margins: { top: 0, bottom: 0, left: 100, right: 100 },
+      verticalAlign: VerticalAlign.CENTER,
+    })
+
+    // Cella 3 — Testo aziendale (destra, allineato a destra)
+    const cellText = new TableCell({
+      children: [
+        new Paragraph({ children: [run('Società di Ingegneria', { bold: true, size: 20, color: BLUE })],   alignment: AlignmentType.RIGHT, spacing: { before: 0, after: 30 } }),
+        new Paragraph({ children: [run('Progettazione Impianti', { size: 18, italic: true, color: GREY })],                        alignment: AlignmentType.RIGHT, spacing: { before: 0, after: 20 } }),
+        new Paragraph({ children: [run('Soluzioni per efficientamento energetico', { size: 18, italic: true, color: GREY })],      alignment: AlignmentType.RIGHT, spacing: { before: 0, after: 20 } }),
+        new Paragraph({ children: [run('Pratiche edilizie e progettazioni strutturali', { size: 18, italic: true, color: GREY })], alignment: AlignmentType.RIGHT, spacing: { before: 0, after: 20 } }),
+        new Paragraph({ children: [run('Installazione Impianti da fonti rinnovabili', { size: 18, italic: true, color: GREY })],   alignment: AlignmentType.RIGHT, spacing: { before: 0, after: 0  } }),
+      ],
+      width: { size: 40, type: WidthType.PERCENTAGE },
+      borders: NO_BORDER,
       margins: { top: 0, bottom: 0, left: 200, right: 0 },
       verticalAlign: VerticalAlign.CENTER,
     })
 
-    return new TableRow({ children: [cellLogo, cellText, cellCerts] })
+    return new TableRow({ children: [cellLogo, cellCerts, cellText] })
   }
 
   const headerTable = new Table({
