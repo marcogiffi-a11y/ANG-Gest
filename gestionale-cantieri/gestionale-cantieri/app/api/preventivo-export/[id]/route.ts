@@ -286,7 +286,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const footerChildren: Paragraph[] = []
   if (imgSerif) {
     footerChildren.push(new Paragraph({
-      children: [new ImageRun({ data: imgSerif, transformation: { width: 120, height: 38 }, type: 'jpg' })],
+      children: [new ImageRun({ data: imgSerif, transformation: { width: 110, height: 78 }, type: 'jpg' })],
       alignment: AlignmentType.CENTER,
       border: { top: { style: BorderStyle.SINGLE, size: 6, color: GREEN } },
       spacing: { before: 80, after: 60 },
@@ -312,16 +312,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     sections: [{
       properties: {
         page: {
-          margin: { top: 720, bottom: 720, left: 1000, right: 1000 },
+          margin: { top: 1800, bottom: 1400, left: 1000, right: 1000 },
         },
+      },
+      headers: {
+        default: new Header({
+          children: [
+            headerTable,
+            new Paragraph({
+              children: [],
+              border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: GREEN } },
+              spacing: { before: 100, after: 0 },
+            }),
+          ],
+        }),
       },
       footers: {
         default: new Footer({ children: footerChildren }),
       },
       children: [
-        // Header aziendale
-        headerTable,
-        greenLine,
 
         // Numero offerta e data
         new Paragraph({
