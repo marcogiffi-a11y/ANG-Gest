@@ -2,6 +2,12 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+const supabasePWA = createSupabaseClient(
+  'https://bfcfgxpkwmlhvjhegmxv.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmY2ZneHBrd21saHZqaGVnbXh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyOTM5NzIsImV4cCI6MjA5Mjg2OTk3Mn0.PbwbpCklqiZv_rrsCjATxc56rNCNy_s-cXSideAMY0Y'
+)
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
@@ -37,7 +43,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     async function loadBadge() {
-      const { count } = await supabase
+      const { count } = await supabasePWA
         .from('richieste_offerta')
         .select('*', { count: 'exact', head: true })
         .eq('stato', 'nuova')
