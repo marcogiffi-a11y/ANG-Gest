@@ -1,479 +1,108 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import Topbar from '@/components/Topbar'
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import Image from 'next/image'
 
-// Client separato per athena-cantieri (database della PWA ANG DL)
-const supabasePWA = createClient(
-  'https://bfcfgxpkwmlhvjhegmxv.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmY2ZneHBrd21saHZqaGVnbXh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyOTM5NzIsImV4cCI6MjA5Mjg2OTk3Mn0.PbwbpCklqiZv_rrsCjATxc56rNCNy_s-cXSideAMY0Y'
-)
+export default function LoginPage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [sent, setSent] = useState(false)
+  const supabase = createClient()
 
-// ─── Tipi ────────────────────────────────────────────────────────────────────
-
-type StatoRichiesta = 'nuova' | 'vista' | 'in_lavorazione' | 'convertita'
-
-type RichiestaOfferta = {
-  id: string
-  cliente: string
-  potenza_kw: number | null
-  accumulo_kwh: number | null
-  maps_link: string | null
-  indirizzo: string | null
-  impianto_esistente: boolean
-  potenza_esistente_kw: number | null
-  contatore_prelievo_kw: number | null
-  stato: StatoRichiesta
-  created_at: string
-  _docCount?: number
-}
-
-// ─── Configurazione stati ─────────────────────────────────────────────────────
-
-const STATO_CFG: Record<StatoRichiesta, { bg: string; color: string; label: string; dot?: string }> = {
-  nuova:         { bg: '#dbeafe', color: '#1d4ed8', label: '🔵 Nuova',          dot: '#3b82f6' },
-  vista:         { bg: '#fef3c7', color: '#92400e', label: '👁 Vista',           dot: '#f59e0b' },
-  in_lavorazione:{ bg: '#ede9fe', color: '#6d28d9', label: '⚙️ In lavorazione',  dot: '#8b5cf6' },
-  convertita:    { bg: '#dcfce7', color: '#166534', label: '✓ Convertita',       dot: '#22c55e' },
-}
-
-const STATI_ORDINE: StatoRichiesta[] = ['nuova', 'vista', 'in_lavorazione', 'convertita']
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const fmtData = (d: string) =>
-  d ? new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
-
-// ─── Drawer dettaglio ─────────────────────────────────────────────────────────
-
-function Drawer({ richiesta, onClose, onStatoChange }: {
-  richiesta: RichiestaOfferta
-  onClose: () => void
-  onStatoChange: (id: string, stato: StatoRichiesta) => void
-}) {
-  const [docs, setDocs] = useState<any[]>([])
-  useEffect(() => {
-    supabasePWA
-      .from('documenti_cantiere')
-      .select('*')
-      .eq('richiesta_id', richiesta.id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setDocs(data || []))
-  }, [richiesta.id])
-
-  const stato = STATO_CFG[richiesta.stato] ?? STATO_CFG.nuova
-
-  return (
-    <>
-      {/* Overlay */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
-          zIndex: 100, animation: 'fadeInOverlay .2s ease'
-        }}
-      />
-
-      {/* Pannello laterale */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 420,
-        background: 'white', zIndex: 101, boxShadow: '-4px 0 24px rgba(0,0,0,.12)',
-        display: 'flex', flexDirection: 'column', overflowY: 'auto'
-      }}>
-        {/* Header drawer */}
-        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>
-              {richiesta.cliente}
-            </div>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>Ricevuta il {fmtData(richiesta.created_at)}</div>
-          </div>
-          <button
-            onClick={onClose}
-            style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: 14, color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >✕</button>
-        </div>
-
-        <div style={{ padding: '20px 24px', flex: 1 }}>
-
-          {/* Stato */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#94a3b8', marginBottom: 8 }}>Stato richiesta</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {STATI_ORDINE.map(s => {
-                const cfg = STATO_CFG[s]
-                const attivo = richiesta.stato === s
-                return (
-                  <button
-                    key={s}
-                    onClick={() => onStatoChange(richiesta.id, s)}
-                    style={{
-                      padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                      border: attivo ? `2px solid ${cfg.dot}` : '1px solid #e2e8f0',
-                      background: attivo ? cfg.bg : 'white',
-                      color: attivo ? cfg.color : '#94a3b8',
-                      transition: 'all .15s'
-                    }}
-                  >{cfg.label}</button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Dati impianto */}
-          <Section title="Dati impianto">
-            <Row label="Potenza"           value={richiesta.potenza_kw        ? `${richiesta.potenza_kw} kW`   : '—'} />
-            <Row label="Accumulo"          value={richiesta.accumulo_kwh      ? `${richiesta.accumulo_kwh} kWh` : '—'} />
-            <Row label="Contatore prelievo" value={richiesta.contatore_prelievo_kw ? `${richiesta.contatore_prelievo_kw} kW` : '—'} />
-          </Section>
-
-          {/* Impianto esistente */}
-          <Section title="Impianto esistente">
-            <Row label="Presente" value={richiesta.impianto_esistente ? '✅ Sì' : '❌ No'} />
-            {richiesta.impianto_esistente && richiesta.potenza_esistente_kw && (
-              <Row label="Potenza esistente" value={`${richiesta.potenza_esistente_kw} kW`} />
-            )}
-          </Section>
-
-          {/* Posizione */}
-          {(richiesta.maps_link || richiesta.indirizzo) && (
-            <Section title="Posizione">
-              {richiesta.indirizzo && <Row label="Indirizzo" value={richiesta.indirizzo} />}
-              {richiesta.maps_link && (
-                <a
-                  href={richiesta.maps_link}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 0',
-                    padding: '10px 12px', borderRadius: 8,
-                    background: '#f0fdf4', border: '1px solid #bbf7d0', textDecoration: 'none'
-                  }}
-                >
-                  <span style={{ fontSize: 18 }}>📍</span>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#166534' }}>Apri su Google Maps</div>
-                    <div style={{ fontSize: 10, color: '#4ade80' }}>Tocca per aprire</div>
-                  </div>
-                </a>
-              )}
-            </Section>
-          )}
-
-          {/* Materiale sopralluogo */}
-          <Section title={`Materiale sopralluogo (${docs.length} file)`}>
-            {docs.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#94a3b8', padding: '8px 0' }}>Nessun file caricato</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {docs.map(doc => (
-                  <a
-                    key={doc.id}
-                    href={doc.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '8px 10px', borderRadius: 7, border: '1px solid #f1f5f9',
-                      background: '#fafafa', textDecoration: 'none'
-                    }}
-                  >
-                    <span style={{ fontSize: 18 }}>{docIcon(doc.tipo)}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.nome}</div>
-                      <div style={{ fontSize: 10, color: '#94a3b8' }}>{doc.tipo?.toUpperCase()} · {fmtData(doc.created_at)}</div>
-                    </div>
-                    <span style={{ fontSize: 13, color: '#3b82f6' }}>↗</span>
-                  </a>
-                ))}
-              </div>
-            )}
-          </Section>
-
-        </div>
-
-        {/* Footer azioni */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => onStatoChange(richiesta.id, 'in_lavorazione')}
-            style={{
-              flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
-              background: '#1d3a6b', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer'
-            }}
-          >
-            ⚙️ Prendi in carico
-          </button>
-          <button
-            onClick={() => onStatoChange(richiesta.id, 'convertita')}
-            style={{
-              flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
-              background: '#6ab826', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer'
-            }}
-          >
-            ✓ Segna convertita
-          </button>
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ─── Componenti helper ────────────────────────────────────────────────────────
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#94a3b8', marginBottom: 8 }}>{title}</div>
-      <div style={{ background: '#f8fafc', borderRadius: 8, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', borderBottom: '1px solid #f1f5f9' }}>
-      <span style={{ fontSize: 12, color: '#64748b' }}>{label}</span>
-      <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{value}</span>
-    </div>
-  )
-}
-
-function docIcon(tipo: string) {
-  if (tipo === 'foto') return '📷'
-  if (tipo === 'scan_pdf') return '📑'
-  if (tipo === 'pdf') return '📄'
-  return '📎'
-}
-
-// ─── Pagina principale ────────────────────────────────────────────────────────
-
-export default function RichiesteOffertaPage() {
-  // supabase non usato qui
-
-  const [richieste,    setRichieste]    = useState<RichiestaOfferta[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [cerca,        setCerca]        = useState('')
-  const [filtroStato,  setFiltroStato]  = useState<StatoRichiesta | ''>('')
-  const [selezionata,  setSelezionata]  = useState<RichiestaOfferta | null>(null)
-
-  useEffect(() => { fetchAll() }, [])
-
-  async function fetchAll() {
-    setLoading(true)
-    const { data } = await supabasePWA
-      .from('richieste_offerta')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (data) {
-      // Carica conteggio documenti per ogni richiesta
-      const ids = data.map((r: any) => r.id)
-      const { data: docData } = await supabasePWA
-        .from('documenti_cantiere')
-        .select('richiesta_id')
-        .in('richiesta_id', ids)
-
-      const docMap: Record<string, number> = {}
-      docData?.forEach((d: any) => {
-        docMap[d.richiesta_id] = (docMap[d.richiesta_id] || 0) + 1
-      })
-
-      setRichieste(data.map((r: any) => ({ ...r, _docCount: docMap[r.id] || 0 })))
-    }
+  async function handleEmail() {
+    setLoading(true); setError('')
+    const fn = mode === 'login'
+      ? supabase.auth.signInWithPassword({ email, password })
+      : supabase.auth.signUp({ email, password })
+    const { error } = await fn
+    if (error) setError(error.message)
+    else if (mode === 'signup') setSent(true)
+    else window.location.href = '/dashboard'
     setLoading(false)
   }
 
-  async function aggiornaStato(id: string, stato: StatoRichiesta) {
-    await supabasePWA.from('richieste_offerta').update({ stato }).eq('id', id)
-    setRichieste(prev => prev.map(r => r.id === id ? { ...r, stato } : r))
-    if (selezionata?.id === id) setSelezionata(prev => prev ? { ...prev, stato } : prev)
+  async function handleGoogle() {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${location.origin}/api/auth/callback` },
+    })
   }
 
-  const filtrate = richieste.filter(r => {
-    const q = cerca.toLowerCase()
-    const matchSearch = !q || r.cliente?.toLowerCase().includes(q) || r.indirizzo?.toLowerCase().includes(q)
-    const matchStato  = !filtroStato || r.stato === filtroStato
-    return matchSearch && matchStato
-  })
-
-  // Contatori per i badge filtro
-  const counts: Record<string, number> = {}
-  richieste.forEach(r => { counts[r.stato] = (counts[r.stato] || 0) + 1 })
-  const nuoveCount = counts['nuova'] || 0
-
   return (
-    <>
-      <Topbar
-        title="Richieste di Offerta"
-        subtitle={nuoveCount > 0 ? `${nuoveCount} nuova${nuoveCount > 1 ? 'e' : ''} dal campo` : 'Tutte le richieste dal campo'}
-      />
-
-      <div style={{ padding: '20px 24px' }}>
-
-        {/* Barra filtri */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            value={cerca}
-            onChange={e => setCerca(e.target.value)}
-            placeholder="🔍  Cerca cliente, indirizzo..."
-            style={{ flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 12 }}
-          />
-
-          {/* Filtri stato con contatori */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <FiltroBtn label="Tutte" count={richieste.length} active={filtroStato === ''} onClick={() => setFiltroStato('')} color="#64748b" />
-            {STATI_ORDINE.map(s => (
-              <FiltroBtn
-                key={s}
-                label={STATO_CFG[s].label}
-                count={counts[s] || 0}
-                active={filtroStato === s}
-                onClick={() => setFiltroStato(s === filtroStato ? '' : s)}
-                color={STATO_CFG[s].dot!}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Tabella */}
-        <div style={{ background: 'white', borderRadius: 10, border: '1px solid #e5e5e2', overflow: 'hidden' }}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8', fontSize: 13 }}>Caricamento...</div>
-          ) : filtrate.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8', fontSize: 13 }}>
-              {richieste.length === 0
-                ? 'Nessuna richiesta ricevuta — le richieste inviate dall\'app ANG DL appariranno qui 📲'
-                : 'Nessuna richiesta corrisponde ai filtri'}
-            </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-                  {['Cliente', 'Impianto', 'Accumulo', 'Indirizzo', 'Materiale', 'Data', 'Stato'].map(h => (
-                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtrate.map(r => {
-                  const cfg = STATO_CFG[r.stato] ?? STATO_CFG.nuova
-                  return (
-                    <tr
-                      key={r.id}
-                      onClick={() => setSelezionata(r)}
-                      style={{ borderBottom: '1px solid #fafafa', cursor: 'pointer', transition: 'background .1s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'white')}
-                    >
-                      {/* Cliente */}
-                      <td style={{ padding: '12px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.cliente || '—'}</div>
-                        <div style={{ fontSize: 10, color: '#94a3b8' }}>ID: {r.id.slice(0, 8)}…</div>
-                      </td>
-
-                      {/* kW */}
-                      <td style={{ padding: '12px 14px', color: '#334155' }}>
-                        {r.potenza_kw ? <span style={{ fontWeight: 600 }}>{r.potenza_kw} kW</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-
-                      {/* kWh */}
-                      <td style={{ padding: '12px 14px', color: '#334155' }}>
-                        {r.accumulo_kwh ? <span>{r.accumulo_kwh} kWh</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-
-                      {/* Indirizzo */}
-                      <td style={{ padding: '12px 14px', maxWidth: 180 }}>
-                        {r.maps_link ? (
-                          <a href={r.maps_link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                            style={{ color: '#16a34a', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
-                            📍 Maps
-                          </a>
-                        ) : r.indirizzo ? (
-                          <span style={{ color: '#64748b', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: 160 }}>
-                            {r.indirizzo}
-                          </span>
-                        ) : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-
-                      {/* Materiale */}
-                      <td style={{ padding: '12px 14px' }}>
-                        {(r._docCount ?? 0) > 0 ? (
-                          <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
-                            📎 {r._docCount} file
-                          </span>
-                        ) : (
-                          <span style={{ color: '#cbd5e1', fontSize: 11 }}>nessuno</span>
-                        )}
-                      </td>
-
-                      {/* Data */}
-                      <td style={{ padding: '12px 14px', color: '#64748b', whiteSpace: 'nowrap', fontSize: 11 }}>
-                        {fmtData(r.created_at)}
-                      </td>
-
-                      {/* Stato */}
-                      <td style={{ padding: '12px 14px' }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap' }}>
-                          {cfg.label}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Footer contatore */}
-        {!loading && filtrate.length > 0 && (
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 10, textAlign: 'right' }}>
-            {filtrate.length} di {richieste.length} richieste
-          </div>
-        )}
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#1e3a5f' }}>
+      {/* Sfondo decorativo */}
+      <div style={{ position:'absolute', inset:0, overflow:'hidden', zIndex:0 }}>
+        <div style={{ position:'absolute', top:-100, right:-100, width:400, height:400, borderRadius:'50%', background:'rgba(106,176,76,0.08)'}}/>
+        <div style={{ position:'absolute', bottom:-150, left:-100, width:500, height:500, borderRadius:'50%', background:'rgba(255,255,255,0.04)'}}/>
       </div>
 
-      {/* Drawer dettaglio */}
-      {selezionata && (
-        <Drawer
-          richiesta={selezionata}
-          onClose={() => setSelezionata(null)}
-          onStatoChange={aggiornaStato}
-        />
-      )}
+      <div style={{ position:'relative', zIndex:1, background:'white', borderRadius:16, padding:'40px 36px', width:400, boxShadow:'0 25px 60px rgba(0,0,0,0.3)' }}>
+        {/* Logo */}
+        <div style={{ textAlign:'center', marginBottom:28 }}>
+          <Image src="/logo.jpg" alt="Athena Next Gen" width={90} height={90} style={{ objectFit:'contain', marginBottom:10 }}/>
+          <div style={{ fontSize:20, fontWeight:800, color:'#1e3a5f' }}>ANG Gest</div>
+          <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>Athena Next Gen S.r.l.</div>
+        </div>
 
-      <style>{`
-        @keyframes fadeInOverlay { from { opacity: 0 } to { opacity: 1 } }
-      `}</style>
-    </>
-  )
-}
+        {sent ? (
+          <div style={{ textAlign:'center', color:'#16a34a', fontSize:14, padding:16 }}>
+            ✅ Controlla la tua email per confermare la registrazione!
+          </div>
+        ) : (
+          <>
+            {/* Google */}
+            <button onClick={handleGoogle} style={{
+              width:'100%', padding:'10px 16px', borderRadius:8, border:'1px solid #e2e8f0',
+              background:'white', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex',
+              alignItems:'center', justifyContent:'center', gap:8, marginBottom:16
+            }}>
+              <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.16C6.51 42.62 14.62 48 24 48z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.16C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.16C12.43 13.72 17.74 9.5 24 9.5z"/></svg>
+              Accedi con Google
+            </button>
 
-// ─── Bottone filtro ───────────────────────────────────────────────────────────
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+              <div style={{ flex:1, height:1, background:'#f1f5f9' }}/>
+              <span style={{ fontSize:11, color:'#94a3b8' }}>oppure</span>
+              <div style={{ flex:1, height:1, background:'#f1f5f9' }}/>
+            </div>
 
-function FiltroBtn({ label, count, active, onClick, color }: {
-  label: string; count: number; active: boolean; onClick: () => void; color: string
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 5,
-        padding: '6px 10px', borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-        border: active ? `2px solid ${color}` : '1px solid #e2e8f0',
-        background: active ? `${color}18` : 'white',
-        color: active ? color : '#64748b',
-        transition: 'all .15s'
-      }}
-    >
-      {label}
-      <span style={{
-        background: active ? color : '#e2e8f0',
-        color: active ? 'white' : '#64748b',
-        borderRadius: 10, fontSize: 10, padding: '1px 6px', fontWeight: 700
-      }}>{count}</span>
-    </button>
+            <div style={{ marginBottom:10 }}>
+              <label style={{ fontSize:11, color:'#64748b', fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', display:'block', marginBottom:4 }}>Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                placeholder="email@azienda.it"
+                style={{ width:'100%', padding:'9px 12px', borderRadius:7, border:'1px solid #e2e8f0', fontSize:13 }}/>
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <label style={{ fontSize:11, color:'#64748b', fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', display:'block', marginBottom:4 }}>Password</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+                placeholder="••••••••"
+                onKeyDown={e=>e.key==='Enter'&&handleEmail()}
+                style={{ width:'100%', padding:'9px 12px', borderRadius:7, border:'1px solid #e2e8f0', fontSize:13 }}/>
+            </div>
+
+            {error && <div style={{ color:'#dc2626', fontSize:12, marginBottom:12, padding:'8px 12px', background:'#fef2f2', borderRadius:6 }}>{error}</div>}
+
+            <button onClick={handleEmail} disabled={loading} style={{
+              width:'100%', padding:'10px 16px', borderRadius:8, border:'none',
+              background: loading ? '#94a3b8' : '#1e3a5f', color:'white',
+              fontSize:13, fontWeight:700, cursor: loading ? 'default' : 'pointer'
+            }}>
+              {loading ? 'Attendere...' : mode === 'login' ? 'Accedi' : 'Registrati'}
+            </button>
+
+            <div style={{ textAlign:'center', marginTop:14, fontSize:12, color:'#64748b' }}>
+              {mode === 'login' ? (
+                <>Non hai un account? <span style={{ color:'#6ab04c', cursor:'pointer', fontWeight:700 }} onClick={()=>setMode('signup')}>Registrati</span></>
+              ) : (
+                <>Hai già un account? <span style={{ color:'#6ab04c', cursor:'pointer', fontWeight:700 }} onClick={()=>setMode('login')}>Accedi</span></>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
