@@ -4,35 +4,59 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { useEffect, useState } from 'react'
 
 const navItems = [
   { section: 'Principale' },
-  { href: '/dashboard',       label: 'Dashboard',         icon: '▦' },
-  { href: '/preventivi',      label: 'Preventivi',         icon: '📝' },
-  { href: '/ordini',          label: 'Ordini',             icon: '📄' },
-  { href: '/progetti',        label: 'Progetti',           icon: '≡' },
-  { href: '/fatture',         label: 'Fatture & SAL',      icon: '📋', dot: true },
-  { href: '/scadenze',        label: 'Scadenze',           icon: '📅' },
+  { href: '/dashboard',           label: 'Dashboard',             icon: '▦' },
+  { href: '/richieste-offerta',   label: 'Richieste di Offerta',  icon: '📲', badgeKey: 'richieste' },
+  { href: '/preventivi',          label: 'Preventivi',            icon: '📝' },
+  { href: '/ordini',              label: 'Ordini',                 icon: '📄' },
+  { href: '/progetti',            label: 'Progetti',              icon: '≡' },
+  { href: '/fatture',             label: 'Fatture & SAL',         icon: '📋', dot: true },
+  { href: '/scadenze',            label: 'Scadenze',              icon: '📅' },
   { section: 'Inserimento' },
-  { href: '/preventivo/nuovo',label: '+ Nuovo preventivo', icon: '+' },
-  { href: '/ordine/nuovo',    label: '+ Nuovo ordine',     icon: '+' },
-  { href: '/clienti',         label: 'Clienti',            icon: '👤' },
-  { href: '/portafogli',      label: 'Portafogli',         icon: '💼' },
-  { href: '/documenti',       label: 'Documenti',          icon: '📁' },
+  { href: '/preventivo/nuovo',    label: '+ Nuovo preventivo',    icon: '+' },
+  { href: '/ordine/nuovo',        label: '+ Nuovo ordine',        icon: '+' },
+  { href: '/clienti',             label: 'Clienti',               icon: '👤' },
+  { href: '/portafogli',          label: 'Portafogli',            icon: '💼' },
+  { href: '/documenti',           label: 'Documenti',             icon: '📁' },
   { section: 'Configurazione' },
-  { href: '/legenda',         label: 'Legenda servizi',    icon: '★' },
-  { href: '/utenti',          label: 'Utenti',             icon: '👥' },
-  { href: '/impostazioni',    label: 'Impostazioni',       icon: '⚙' },
+  { href: '/legenda',             label: 'Legenda servizi',       icon: '★' },
+  { href: '/utenti',              label: 'Utenti',                icon: '👥' },
+  { href: '/impostazioni',        label: 'Impostazioni',          icon: '⚙' },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
+  const router   = useRouter()
   const supabase = createClient()
+
+  // Badge: contatore richieste "nuova" non ancora viste
+  const [richiesteNuove, setRichiesteNuove] = useState(0)
+
+  useEffect(() => {
+    async function loadBadge() {
+      const { count } = await supabase
+        .from('richieste_offerta')
+        .select('*', { count: 'exact', head: true })
+        .eq('stato', 'nuova')
+      setRichiesteNuove(count ?? 0)
+    }
+    loadBadge()
+
+    // Aggiorna ogni 60 secondi per rilevare nuove richieste
+    const interval = setInterval(loadBadge, 60_000)
+    return () => clearInterval(interval)
+  }, [])
 
   async function logout() {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  const badges: Record<string, number> = {
+    richieste: richiesteNuove,
   }
 
   return (
@@ -59,7 +83,15 @@ export default function Sidebar() {
               }}>{item.section}</div>
             )
           }
-          const active = pathname === item.href || (item.href !== '/dashboard' && item.href !== '/preventivo/nuovo' && item.href !== '/ordine/nuovo' && pathname.startsWith(item.href))
+
+          const active = pathname === item.href ||
+            (item.href !== '/dashboard' &&
+             item.href !== '/preventivo/nuovo' &&
+             item.href !== '/ordine/nuovo' &&
+             pathname.startsWith(item.href))
+
+          const badgeCount = item.badgeKey ? badges[item.badgeKey] ?? 0 : 0
+
           return (
             <Link key={item.href} href={item.href} style={{
               display: 'flex', alignItems: 'center', gap: 9, padding: '8px 16px',
@@ -70,8 +102,23 @@ export default function Sidebar() {
               transition: 'all .12s'
             }}>
               <span style={{ fontSize: 13, opacity: active ? 1 : 0.6 }}>{item.icon}</span>
-              {item.label}
-              {item.dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', marginLeft: 'auto' }}/>}
+              <span style={{ flex: 1 }}>{item.label}</span>
+
+              {/* Badge richieste nuove */}
+              {badgeCount > 0 && (
+                <span style={{
+                  minWidth: 18, height: 18, borderRadius: 9,
+                  background: '#ef4444', color: 'white',
+                  fontSize: 10, fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '0 5px'
+                }}>{badgeCount}</span>
+              )}
+
+              {/* Dot SAL */}
+              {item.dot && !badgeCount && (
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
+              )}
             </Link>
           )
         })}
