@@ -1,7 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@supabase/supabase-js'
 import Topbar from '@/components/Topbar'
+
+// Client separato per athena-cantieri (database della PWA ANG DL)
+const supabasePWA = createClient(
+  'https://bfcfgxpkwmlhvjhegmxv.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmY2ZneHBrd21saHZqaGVnbXh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyOTM5NzIsImV4cCI6MjA5Mjg2OTk3Mn0.PbwbpCklqiZv_rrsCjATxc56rNCNy_s-cXSideAMY0Y'
+)
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
 
@@ -46,10 +52,8 @@ function Drawer({ richiesta, onClose, onStatoChange }: {
   onStatoChange: (id: string, stato: StatoRichiesta) => void
 }) {
   const [docs, setDocs] = useState<any[]>([])
-  const supabase = createClient()
-
   useEffect(() => {
-    supabase
+    supabasePWA
       .from('documenti_cantiere')
       .select('*')
       .eq('richiesta_id', richiesta.id)
@@ -246,7 +250,7 @@ function docIcon(tipo: string) {
 // ─── Pagina principale ────────────────────────────────────────────────────────
 
 export default function RichiesteOffertaPage() {
-  const supabase = createClient()
+  // supabase non usato qui
 
   const [richieste,    setRichieste]    = useState<RichiestaOfferta[]>([])
   const [loading,      setLoading]      = useState(true)
@@ -258,7 +262,7 @@ export default function RichiesteOffertaPage() {
 
   async function fetchAll() {
     setLoading(true)
-    const { data } = await supabase
+    const { data } = await supabasePWA
       .from('richieste_offerta')
       .select('*')
       .order('created_at', { ascending: false })
@@ -266,7 +270,7 @@ export default function RichiesteOffertaPage() {
     if (data) {
       // Carica conteggio documenti per ogni richiesta
       const ids = data.map((r: any) => r.id)
-      const { data: docData } = await supabase
+      const { data: docData } = await supabasePWA
         .from('documenti_cantiere')
         .select('richiesta_id')
         .in('richiesta_id', ids)
@@ -282,7 +286,7 @@ export default function RichiesteOffertaPage() {
   }
 
   async function aggiornaStato(id: string, stato: StatoRichiesta) {
-    await supabase.from('richieste_offerta').update({ stato }).eq('id', id)
+    await supabasePWA.from('richieste_offerta').update({ stato }).eq('id', id)
     setRichieste(prev => prev.map(r => r.id === id ? { ...r, stato } : r))
     if (selezionata?.id === id) setSelezionata(prev => prev ? { ...prev, stato } : prev)
   }
