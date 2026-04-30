@@ -29,6 +29,7 @@ const navItems = [
   { href: '/documenti',           label: 'Documenti',             icon: '📁' },
   { section: 'Configurazione' },
   { href: '/legenda',             label: 'Legenda servizi',       icon: '★' },
+  { href: '/risorse',             label: 'Risorse e Servizi',     icon: '🔧' },
   { href: '/utenti',              label: 'Utenti',                icon: '👥' },
   { href: '/impostazioni',        label: 'Impostazioni',          icon: '⚙' },
 ]
