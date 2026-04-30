@@ -13,10 +13,12 @@ const fmtData = (d: string | null | undefined) => {
 }
 
 export default function ProgettiPage() {
+  const supabase = createClient()
   const [progetti, setProgetti] = useState<any[]>([])
+  const [risorse, setRisorse] = useState<any[]>([])
+  const [tipologie, setTipologie] = useState<any[]>([])
   const [filtro, setFiltro] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
-  const supabase = createClient()
 
   useEffect(() => {
     supabase
@@ -24,7 +26,18 @@ export default function ProgettiPage() {
       .select('*, clienti(ragione_sociale, portafogli(nome)), sal(stato)')
       .order('created_at', { ascending: false })
       .then(({ data }) => setProgetti(data || []))
+
+    supabase.from('risorse').select('*').order('nome')
+      .then(({ data }) => setRisorse(data || []))
+
+    supabase.from('tipologie_servizio').select('*').order('nome')
+      .then(({ data }) => setTipologie(data || []))
   }, [])
+
+  async function updateProgetto(id: string, field: string, value: string) {
+    await supabase.from('progetti').update({ [field]: value || null }).eq('id', id)
+    setProgetti(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
+  }
 
   const filtered = progetti.filter(p => {
     const q = filtro.toLowerCase()
@@ -46,6 +59,12 @@ export default function ProgettiPage() {
   }
   const statoLabel: Record<string, string> = {
     bozza: 'Bozza', attivo: 'In corso', completato: 'Completato', sospeso: 'Sospeso'
+  }
+
+  const selectStyle: React.CSSProperties = {
+    fontSize: 11, padding: '3px 6px', borderRadius: 5,
+    border: '1px solid #e2e8f0', background: 'white',
+    color: '#334155', cursor: 'pointer', width: '100%', maxWidth: 130
   }
 
   const colHeaders = [
@@ -79,8 +98,7 @@ export default function ProgettiPage() {
                   <th key={h} style={{
                     padding: '10px 12px', textAlign: 'left',
                     fontSize: 10, color: '#94a3b8', fontWeight: 600,
-                    textTransform: 'uppercase', letterSpacing: '.04em',
-                    whiteSpace: 'nowrap'
+                    textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap'
                   }}>{h}</th>
                 ))}
               </tr>
@@ -94,34 +112,38 @@ export default function ProgettiPage() {
               {filtered.map(p => {
                 const sal = getSalStats(p.sal)
                 return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #fafafa', cursor: 'pointer' }}
-                    onClick={() => window.location.href = `/progetti/${p.id}`}
+                  <tr key={p.id} style={{ borderBottom: '1px solid #fafafa' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
 
                     {/* Oggetto Commessa */}
-                    <td style={{ padding: '10px 12px' }}>
+                    <td style={{ padding: '10px 12px', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.clienti?.ragione_sociale}</div>
                       <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.numero_ordine}</div>
                     </td>
 
-                    {/* Data Inizio */}
-                    <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap' }}>
-                      {fmtData(p.data_inizio)}
+                    {/* Data Inizio — dal created_at */}
+                    <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
+                      {fmtData(p.created_at)}
                     </td>
 
                     {/* Cliente */}
-                    <td style={{ padding: '10px 12px', color: '#334155' }}>
+                    <td style={{ padding: '10px 12px', color: '#334155', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       {p.clienti?.ragione_sociale || '—'}
                     </td>
 
                     {/* Portafoglio */}
-                    <td style={{ padding: '10px 12px', color: '#64748b' }}>
+                    <td style={{ padding: '10px 12px', color: '#64748b', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       {p.clienti?.portafogli?.nome || '—'}
                     </td>
 
-                    {/* Categoria (ex Servizio) */}
-                    <td style={{ padding: '10px 12px' }}>
+                    {/* Categoria */}
+                    <td style={{ padding: '10px 12px', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       <span style={{
                         fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
                         background: p.tipo_servizio === 'ingegneria' ? '#dbeafe' : '#fef3c7',
@@ -131,23 +153,35 @@ export default function ProgettiPage() {
                       </span>
                     </td>
 
-                    {/* Servizio (nuovo) */}
-                    <td style={{ padding: '10px 12px', color: '#475569' }}>
-                      {p.servizio || '—'}
+                    {/* Servizio — dropdown da tipologie_servizio */}
+                    <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
+                      <select
+                        style={selectStyle}
+                        value={p.servizio || ''}
+                        onChange={e => updateProgetto(p.id, 'servizio', e.target.value)}
+                      >
+                        <option value="">—</option>
+                        {tipologie.map(t => (
+                          <option key={t.id} value={t.nome}>{t.nome}</option>
+                        ))}
+                      </select>
                     </td>
 
                     {/* Importo */}
-                    <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1e3a5f' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1e3a5f', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       {fmt(p.importo_netto)}
                     </td>
 
                     {/* SAL */}
-                    <td style={{ padding: '10px 12px', color: '#64748b' }}>
+                    <td style={{ padding: '10px 12px', color: '#64748b', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       {sal.completati}/{sal.totali}
                     </td>
 
                     {/* Stato */}
-                    <td style={{ padding: '10px 12px' }}>
+                    <td style={{ padding: '10px 12px', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       <span style={{
                         fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
                         background: statoColor[p.stato] || '#f1f5f9',
@@ -157,13 +191,23 @@ export default function ProgettiPage() {
                       </span>
                     </td>
 
-                    {/* Risorsa (nuovo) */}
-                    <td style={{ padding: '10px 12px', color: '#475569' }}>
-                      {p.risorsa || '—'}
+                    {/* Risorsa — dropdown da risorse */}
+                    <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
+                      <select
+                        style={selectStyle}
+                        value={p.risorsa || ''}
+                        onChange={e => updateProgetto(p.id, 'risorsa', e.target.value)}
+                      >
+                        <option value="">—</option>
+                        {risorse.map(r => (
+                          <option key={r.id} value={r.nome}>{r.nome}</option>
+                        ))}
+                      </select>
                     </td>
 
-                    {/* Data di Chiusura (nuovo) */}
-                    <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap' }}>
+                    {/* Data di Chiusura */}
+                    <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/progetti/${p.id}`}>
                       {fmtData(p.data_chiusura)}
                     </td>
                   </tr>
