@@ -12,6 +12,20 @@ const fmtData = (d: string | null | undefined) => {
   return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+const STATO_STYLE: Record<string, { bg: string; color: string }> = {
+  da_iniziare: { bg: '#f1f5f9', color: '#475569' },
+  in_corso:    { bg: '#dbeafe', color: '#1e40af' },
+  integrare:   { bg: '#fef3c7', color: '#92400e' },
+  risorse:     { bg: '#ef4444', color: '#ffffff' },
+}
+
+const STATO_LABEL: Record<string, string> = {
+  da_iniziare: 'Da iniziare',
+  in_corso:    'In corso',
+  integrare:   'Integrare',
+  risorse:     'Risorse',
+}
+
 export default function ProgettiPage() {
   const supabase = createClient()
   const [progetti, setProgetti] = useState<any[]>([])
@@ -51,26 +65,32 @@ export default function ProgettiPage() {
     return { completati: sals.filter(s => ['fatturato', 'pagato'].includes(s.stato)).length, totali: sals.length }
   }
 
-  const statoColor: Record<string, string> = {
-    bozza: '#f1f5f9', attivo: '#dbeafe', completato: '#dcfce7', sospeso: '#fef3c7'
-  }
-  const statoText: Record<string, string> = {
-    bozza: '#475569', attivo: '#1d4ed8', completato: '#166534', sospeso: '#92400e'
-  }
-  const statoLabel: Record<string, string> = {
-    bozza: 'Bozza', attivo: 'In corso', completato: 'Completato', sospeso: 'Sospeso'
-  }
-
-  const selectStyle: React.CSSProperties = {
-    fontSize: 11, padding: '3px 6px', borderRadius: 5,
-    border: '1px solid #e2e8f0', background: 'white',
-    color: '#334155', cursor: 'pointer', width: '100%', maxWidth: 130
-  }
-
   const colHeaders = [
     'Oggetto Commessa', 'Data Inizio', 'Cliente', 'Portafoglio',
     'Categoria', 'Servizio', 'Importo', 'SAL', 'Stato', 'Risorsa', 'Data di Chiusura'
   ]
+
+  const selectStyle = (stato: string): React.CSSProperties => ({
+    fontSize: 11,
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: 20,
+    border: 'none',
+    cursor: 'pointer',
+    appearance: 'none' as any,
+    WebkitAppearance: 'none' as any,
+    outline: 'none',
+    width: '100%',
+    maxWidth: 130,
+    background: STATO_STYLE[stato]?.bg || '#f1f5f9',
+    color: STATO_STYLE[stato]?.color || '#475569',
+  })
+
+  const dropdownStyle: React.CSSProperties = {
+    fontSize: 11, padding: '3px 6px', borderRadius: 5,
+    border: '1px solid #e2e8f0', background: 'white',
+    color: '#334155', cursor: 'pointer', width: '100%', maxWidth: 130
+  }
 
   return (
     <>
@@ -111,6 +131,7 @@ export default function ProgettiPage() {
               )}
               {filtered.map(p => {
                 const sal = getSalStats(p.sal)
+                const statoCorrente = p.stato_progetto || 'da_iniziare'
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #fafafa' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
@@ -123,7 +144,7 @@ export default function ProgettiPage() {
                       <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.numero_ordine}</div>
                     </td>
 
-                    {/* Data Inizio — dal created_at */}
+                    {/* Data Inizio */}
                     <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', cursor: 'pointer' }}
                       onClick={() => window.location.href = `/progetti/${p.id}`}>
                       {fmtData(p.created_at)}
@@ -153,13 +174,10 @@ export default function ProgettiPage() {
                       </span>
                     </td>
 
-                    {/* Servizio — dropdown da tipologie_servizio */}
+                    {/* Servizio dropdown */}
                     <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
-                      <select
-                        style={selectStyle}
-                        value={p.servizio || ''}
-                        onChange={e => updateProgetto(p.id, 'servizio', e.target.value)}
-                      >
+                      <select style={dropdownStyle} value={p.servizio || ''}
+                        onChange={e => updateProgetto(p.id, 'servizio', e.target.value)}>
                         <option value="">—</option>
                         {tipologie.map(t => (
                           <option key={t.id} value={t.nome}>{t.nome}</option>
@@ -179,25 +197,43 @@ export default function ProgettiPage() {
                       {sal.completati}/{sal.totali}
                     </td>
 
-                    {/* Stato */}
-                    <td style={{ padding: '10px 12px', cursor: 'pointer' }}
-                      onClick={() => window.location.href = `/progetti/${p.id}`}>
-                      <span style={{
-                        fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-                        background: statoColor[p.stato] || '#f1f5f9',
-                        color: statoText[p.stato] || '#475569'
-                      }}>
-                        {statoLabel[p.stato] || p.stato}
-                      </span>
+                    {/* Stato — dropdown colorato */}
+                    <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <select
+                          style={selectStyle(statoCorrente)}
+                          value={statoCorrente}
+                          onChange={e => updateProgetto(p.id, 'stato_progetto', e.target.value)}
+                        >
+                          <option value="da_iniziare">Da iniziare</option>
+                          <option value="in_corso">In corso</option>
+                          <option value="integrare">Integrare</option>
+                          <option value="risorse">Risorse</option>
+                        </select>
+
+                        {/* Triangolino allerta solo se risorse */}
+                        {statoCorrente === 'risorse' && (
+                          <div style={{
+                            width: 0, height: 0,
+                            borderLeft: '8px solid transparent',
+                            borderRight: '8px solid transparent',
+                            borderBottom: '14px solid #facc15',
+                            position: 'relative',
+                            flexShrink: 0
+                          }}>
+                            <span style={{
+                              position: 'absolute', top: 3, left: -3,
+                              fontSize: 9, fontWeight: 700, color: '#1a1a00'
+                            }}>!</span>
+                          </div>
+                        )}
+                      </div>
                     </td>
 
-                    {/* Risorsa — dropdown da risorse */}
+                    {/* Risorsa dropdown */}
                     <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
-                      <select
-                        style={selectStyle}
-                        value={p.risorsa || ''}
-                        onChange={e => updateProgetto(p.id, 'risorsa', e.target.value)}
-                      >
+                      <select style={dropdownStyle} value={p.risorsa || ''}
+                        onChange={e => updateProgetto(p.id, 'risorsa', e.target.value)}>
                         <option value="">—</option>
                         {risorse.map(r => (
                           <option key={r.id} value={r.nome}>{r.nome}</option>
