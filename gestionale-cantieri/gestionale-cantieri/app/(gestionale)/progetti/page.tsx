@@ -12,18 +12,17 @@ const fmtData = (d: string | null | undefined) => {
   return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const STATO_STYLE: Record<string, { bg: string; color: string }> = {
+const STATI_FISSI: Record<string, { bg: string; color: string }> = {
   da_iniziare: { bg: '#f1f5f9', color: '#475569' },
   in_corso:    { bg: '#dbeafe', color: '#1e40af' },
   integrare:   { bg: '#fef3c7', color: '#92400e' },
-  risorse:     { bg: '#ef4444', color: '#ffffff' },
+  chiuso:      { bg: '#dcfce7', color: '#166534' },
 }
 
-const STATO_LABEL: Record<string, string> = {
+const STATI_LABEL: Record<string, string> = {
   da_iniziare: 'Da iniziare',
   in_corso:    'In corso',
   integrare:   'Integrare',
-  risorse:     'Risorse',
 }
 
 export default function ProgettiPage() {
@@ -53,6 +52,16 @@ export default function ProgettiPage() {
     setProgetti(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
   }
 
+  // Un valore è una risorsa se NON è uno degli stati fissi
+  const isRisorsa = (val: string) => val && !STATI_FISSI[val]
+
+  const getStatoStyle = (val: string): React.CSSProperties => {
+    if (!val || val === 'da_iniziare') return { background: '#f1f5f9', color: '#475569' }
+    if (STATI_FISSI[val]) return { background: STATI_FISSI[val].bg, color: STATI_FISSI[val].color }
+    // è una risorsa
+    return { background: '#ef4444', color: '#ffffff' }
+  }
+
   const filtered = progetti.filter(p => {
     const q = filtro.toLowerCase()
     const match = !q || p.clienti?.ragione_sociale?.toLowerCase().includes(q) || p.numero_ordine?.toLowerCase().includes(q)
@@ -69,22 +78,6 @@ export default function ProgettiPage() {
     'Oggetto Commessa', 'Data Inizio', 'Cliente', 'Portafoglio',
     'Categoria', 'Servizio', 'Importo', 'SAL', 'Stato', 'Risorsa', 'Data di Chiusura'
   ]
-
-  const selectStyle = (stato: string): React.CSSProperties => ({
-    fontSize: 11,
-    fontWeight: 600,
-    padding: '4px 10px',
-    borderRadius: 20,
-    border: 'none',
-    cursor: 'pointer',
-    appearance: 'none' as any,
-    WebkitAppearance: 'none' as any,
-    outline: 'none',
-    width: '100%',
-    maxWidth: 130,
-    background: STATO_STYLE[stato]?.bg || '#f1f5f9',
-    color: STATO_STYLE[stato]?.color || '#475569',
-  })
 
   const dropdownStyle: React.CSSProperties = {
     fontSize: 11, padding: '3px 6px', borderRadius: 5,
@@ -131,7 +124,10 @@ export default function ProgettiPage() {
               )}
               {filtered.map(p => {
                 const sal = getSalStats(p.sal)
-                const statoCorrente = p.stato_progetto || 'da_iniziare'
+                const statoVal = p.stato_progetto || 'da_iniziare'
+                const statoStyle = getStatoStyle(statoVal)
+                const mostraAlert = isRisorsa(statoVal)
+
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #fafafa' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
@@ -197,22 +193,40 @@ export default function ProgettiPage() {
                       {sal.completati}/{sal.totali}
                     </td>
 
-                    {/* Stato — dropdown colorato */}
+                    {/* Stato — dropdown con stati fissi + nomi risorse */}
                     <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <select
-                          style={selectStyle(statoCorrente)}
-                          value={statoCorrente}
+                          value={statoVal}
                           onChange={e => updateProgetto(p.id, 'stato_progetto', e.target.value)}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            borderRadius: 20,
+                            border: 'none',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            appearance: 'none' as any,
+                            WebkitAppearance: 'none' as any,
+                            maxWidth: 130,
+                            ...statoStyle
+                          }}
                         >
                           <option value="da_iniziare">Da iniziare</option>
                           <option value="in_corso">In corso</option>
                           <option value="integrare">Integrare</option>
-                          <option value="risorse">Risorse</option>
+                          <option value="chiuso">Chiuso</option>
+                          {risorse.length > 0 && (
+                            <option disabled>──────────</option>
+                          )}
+                          {risorse.map(r => (
+                            <option key={r.id} value={r.nome}>{r.nome}</option>
+                          ))}
                         </select>
 
-                        {/* Triangolino allerta solo se risorse */}
-                        {statoCorrente === 'risorse' && (
+                        {/* Triangolino allerta solo se è una risorsa */}
+                        {mostraAlert && (
                           <div style={{
                             width: 0, height: 0,
                             borderLeft: '8px solid transparent',
