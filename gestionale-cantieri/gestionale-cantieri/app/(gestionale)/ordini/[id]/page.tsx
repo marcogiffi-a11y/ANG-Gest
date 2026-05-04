@@ -130,19 +130,21 @@ export default function DettaglioOrdine() {
     load()
   }, [id])
 
-  // ── Calcoli ────────────────────────────────────────────────────────────────
-  const importoCassa = importoNetto * cassaPerc / 100
-  const imponibile   = importoNetto + importoCassa
-  const ivaImporto   = imponibile * ivaPerc / 100
-  const totLordo     = imponibile + ivaImporto
-  const percTotSal   = sals.reduce((acc, s) => acc + s.percentuale, 0)
+  // ── Calcoli (cassa solo per ingegneria, mai per fornitura_posa) ───────────
+  const isFornitura    = progetto?.tipo_servizio === 'fornitura_posa'
+  const cassaEffettiva = isFornitura ? 0 : cassaPerc
+  const importoCassa   = importoNetto * cassaEffettiva / 100
+  const imponibile     = importoNetto + importoCassa
+  const ivaImporto     = imponibile * ivaPerc / 100
+  const totLordo       = imponibile + ivaImporto
+  const percTotSal     = sals.reduce((acc, s) => acc + s.percentuale, 0)
 
   // ── Azioni ────────────────────────────────────────────────────────────────
   async function salvaModifiche() {
     setSaving(true)
     await supabase.from('progetti').update({
       importo_netto:    importoNetto,
-      cassa_percentuale: cassaPerc,
+      cassa_percentuale: isFornitura ? 0 : cassaPerc,
       iva_percentuale:  ivaPerc,
       stato,
       note: note || null,
@@ -310,16 +312,18 @@ export default function DettaglioOrdine() {
                 min={0}
               />
             </div>
-            <div>
-              <label style={lbl}>Cassa prev. %</label>
-              <input
-                style={inp}
-                type="number"
-                value={cassaPerc}
-                onChange={e => setCassaPerc(parseFloat(e.target.value) || 0)}
-                min={0} max={100} step={0.5}
-              />
-            </div>
+            {!isFornitura && (
+              <div>
+                <label style={lbl}>Cassa ingegneri %</label>
+                <input
+                  style={inp}
+                  type="number"
+                  value={cassaPerc}
+                  onChange={e => setCassaPerc(parseFloat(e.target.value) || 0)}
+                  min={0} max={10} step={0.5}
+                />
+              </div>
+            )}
             <div>
               <label style={lbl}>Aliquota IVA</label>
               <select
@@ -339,10 +343,10 @@ export default function DettaglioOrdine() {
           {/* Riepilogo */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
             {[
-              { label: 'Importo netto',        val: fmt(importoNetto),  color: '#1e3a5f' },
-              { label: `Cassa (${cassaPerc}%)`, val: fmt(importoCassa), color: '#475569' },
-              { label: `IVA (${ivaPerc}%)`,     val: fmt(ivaImporto),   color: '#475569' },
-              { label: 'Totale lordo',          val: fmt(totLordo),     color: '#166534', bold: true },
+              { label: 'Importo netto',                                 val: fmt(importoNetto),  color: '#1e3a5f' },
+              ...(!isFornitura ? [{ label: `Cassa ingegneri (${cassaPerc}%)`, val: fmt(importoCassa), color: '#475569' }] : []),
+              { label: `IVA (${ivaPerc}%)`,                             val: fmt(ivaImporto),   color: '#475569' },
+              { label: 'Totale lordo',                                  val: fmt(totLordo),     color: '#166534', bold: true },
             ].map(k => (
               <div key={k.label} style={{
                 background: k.bold ? '#f0fdf4' : '#f8fafc',
