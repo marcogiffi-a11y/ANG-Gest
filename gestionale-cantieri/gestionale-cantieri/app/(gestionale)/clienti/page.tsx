@@ -32,7 +32,15 @@ export default function ClientiPage() {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ ...empty })
-  const [editId, setEditId] = useState<string | null>(null)
+  const [editId,      setEditId]      = useState<string | null>(null)
+  const [portafogli,  setPortafogli]  = useState<any[]>([])
+  const [errore,      setErrore]      = useState<string | null>(null)
+  const [portafoglioId, setPortafoglioId] = useState<string>('')
+
+  useEffect(() => {
+    supabase.from('portafogli').select('*').order('nome')
+      .then(({ data }) => setPortafogli(data || []))
+  }, [])
 
   async function load() {
     const { data } = await supabase
@@ -47,6 +55,8 @@ export default function ClientiPage() {
   function apriNuovo() {
     setForm({ ...empty })
     setEditId(null)
+    setPortafoglioId('')
+    setErrore(null)
     setOpen(true)
   }
 
@@ -66,6 +76,8 @@ export default function ClientiPage() {
       sdi: c.sdi || '',
     })
     setEditId(c.id)
+    setPortafoglioId(c.portafoglio_id || '')
+    setErrore(null)
     setOpen(true)
   }
 
@@ -114,13 +126,22 @@ export default function ClientiPage() {
       payload.sdi = form.sdi || null
     }
 
+    if (portafoglioId) payload.portafoglio_id = portafoglioId
+
+    let error
     if (editId) {
-      await supabase.from('clienti').update(payload).eq('id', editId)
+      const res = await supabase.from('clienti').update(payload).eq('id', editId)
+      error = res.error
     } else {
-      await supabase.from('clienti').insert(payload)
+      const res = await supabase.from('clienti').insert(payload)
+      error = res.error
     }
 
     setSaving(false)
+    if (error) {
+      setErrore('Errore: ' + error.message)
+      return
+    }
     chiudi()
     load()
   }
@@ -217,6 +238,21 @@ export default function ClientiPage() {
 
             <div style={{ padding: 20 }}>
 
+              {/* Portafoglio */}
+              {portafogli.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={lbl}>Portafoglio</label>
+                  <select
+                    value={portafoglioId}
+                    onChange={e => setPortafoglioId(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }}
+                  >
+                    <option value="">— Nessun portafoglio —</option>
+                    {portafogli.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  </select>
+                </div>
+              )}
+
               {/* Tipo cliente */}
               <div style={{ marginBottom: 18 }}>
                 <label style={lbl}>Tipo cliente *</label>
@@ -287,11 +323,18 @@ export default function ClientiPage() {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: 8, position: 'sticky', bottom: 0, background: 'white' }}>
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f5f9', position: 'sticky', bottom: 0, background: 'white' }}>
+              {errore && (
+                <div style={{ marginBottom: 10, padding: '8px 12px', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 11, color: '#991b1b' }}>
+                  ⚠ {errore}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button onClick={chiudi} style={btnSecondary}>Annulla</button>
               <button onClick={salva} disabled={saving} style={{ ...btnPrimary, opacity: saving ? .6 : 1 }}>
                 {saving ? 'Salvataggio...' : editId ? '✓ Salva modifiche' : '✓ Crea cliente'}
               </button>
+              </div>
             </div>
           </div>
         </div>
