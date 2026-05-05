@@ -46,6 +46,25 @@ export default function NuovoOrdinePage() {
   useEffect(() => {
     supabase.from('portafogli').select('*').order('nome').then(({ data }) => setPortafogli(data || []))
     supabase.from('servizi_ingegneria').select('nome').order('ordine').then(({ data }) => setServiziLegenda((data || []).map((s: any) => s.nome)))
+
+    // Auto-genera numero ordine
+    const anno = new Date().getFullYear()
+    supabase
+      .from('progetti')
+      .select('numero_ordine')
+      .ilike('numero_ordine', `ORD-${anno}-%`)
+      .order('numero_ordine', { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const last  = data[0].numero_ordine as string
+          const match = last.match(/(\d+)$/)
+          const num   = match ? parseInt(match[1]) + 1 : 1
+          setNumeroOrdine(`ORD-${anno}-${String(num).padStart(3, '0')}`)
+        } else {
+          setNumeroOrdine(`ORD-${anno}-001`)
+        }
+      })
   }, [])
 
   async function creaPortafoglio() {
@@ -113,7 +132,7 @@ export default function NuovoOrdinePage() {
         tipo_servizio: tipoServizio,
         servizi: serviziSelezionati,
         importo_netto: parseFloat(importoNetto.replace(',', '.') || '0'),
-        cassa_percentuale: parseFloat(cassaPerc || '0'),
+        cassa_percentuale: tipoServizio === 'ingegneria' ? parseFloat(cassaPerc || '0') : 0,
         iva_percentuale: parseFloat(ivaPerc.replace('%', '') || '22'),
         note: note || null,
         stato: 'attivo',
@@ -252,12 +271,28 @@ export default function NuovoOrdinePage() {
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid #e5e5e2', padding: 18, marginBottom: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Dati ordine</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                <div><label style={lbl}>Numero ordine *</label><input value={numeroOrdine} onChange={e => setNumeroOrdine(e.target.value)} placeholder="ORD-2025-001" style={inp}/></div>
-                <div><label style={lbl}>N. offerta (se diverso)</label><input value={numeroOfferta} onChange={e => setNumeroOfferta(e.target.value)} placeholder="OFF-2025-001" style={inp}/></div>
+                <div>
+                  <label style={lbl}>
+                    Numero ordine *
+                    <span style={{ marginLeft: 6, fontSize: 9, background: '#fef3c7', color: '#92400e', borderRadius: 3, padding: '1px 5px', fontWeight: 700, textTransform: 'uppercase' }}>
+                      AUTO
+                    </span>
+                  </label>
+                  <input
+                    value={numeroOrdine}
+                    onChange={e => setNumeroOrdine(e.target.value)}
+                    placeholder="ORD-2026-001"
+                    style={{ ...inp, borderColor: numeroOrdine ? '#6ab04c' : '#e2e8f0', fontFamily: 'monospace', fontWeight: 700 }}
+                  />
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Generato automaticamente · puoi modificarlo</div>
+                </div>
+                <div><label style={lbl}>N. offerta (se diverso)</label><input value={numeroOfferta} onChange={e => setNumeroOfferta(e.target.value)} placeholder="OFF-2026-001" style={inp}/></div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: tipoServizio === 'ingegneria' ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10, marginBottom: 10 }}>
                 <div><label style={lbl}>Importo netto (€) *</label><input value={importoNetto} onChange={e => setImportoNetto(e.target.value)} placeholder="0,00" style={inp}/></div>
-                <div><label style={lbl}>Cassa ingegneri (%)</label><input value={cassaPerc} onChange={e => setCassaPerc(e.target.value)} style={inp}/></div>
+                {tipoServizio === 'ingegneria' && (
+                  <div><label style={lbl}>Cassa ingegneri (%)</label><input value={cassaPerc} onChange={e => setCassaPerc(e.target.value)} style={inp}/></div>
+                )}
                 <div><label style={lbl}>IVA applicabile *</label>
                   <select value={ivaPerc} onChange={e => setIvaPerc(e.target.value)} style={inp}>
                     {IVA_OPTIONS.map(o => <option key={o} value={o}>{o.includes('%') ? o : o + (isNaN(Number(o)) ? '' : '%')}</option>)}
