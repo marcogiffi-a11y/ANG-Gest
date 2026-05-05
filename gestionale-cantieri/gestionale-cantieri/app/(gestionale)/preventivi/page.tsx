@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/Topbar'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
@@ -23,12 +24,14 @@ const STATO_CFG: Record<string, { bg: string; color: string; label: string }> = 
 
 export default function PreventiviPage() {
   const supabase = createClient()
+  const router   = useRouter()
   const [preventivi,     setPreventivi]     = useState<any[]>([])
   const [loading,        setLoading]        = useState(true)
   const [cerca,          setCerca]          = useState('')
   const [filtroStato,    setFiltroStato]    = useState('')
   const [filtroServizio, setFiltroServizio] = useState('')
   const [deleting,       setDeleting]       = useState<string | null>(null)
+  const [toastOrdine,    setToastOrdine]    = useState<{ id: string; numero: string } | null>(null)
 
   useEffect(() => {
     supabase
@@ -57,6 +60,80 @@ export default function PreventiviPage() {
     await supabase.from('preventivi').delete().eq('id', id)
     setPreventivi(prev => prev.filter(p => p.id !== id))
     setDeleting(null)
+  }
+
+  // ── Crea ordine da preventivo accettato ──────────────────────────────────
+  async function creaOrdineDaPreventivo(prev: any): Promise<string | null> {
+    const anno = new Date().getFullYear()
+    const { data: lastOrd } = await supabase
+      .from('progetti')
+      .select('numero_ordine')
+      .ilike('numero_ordine', `ORD-${anno}-%`)
+      .order('numero_ordine', { ascending: false })
+      .limit(1)
+
+    let nextNum = 1
+    if (lastOrd && lastOrd.length > 0) {
+      const match = lastOrd[0].numero_ordine.match(/(\d+)$/)
+      if (match) nextNum = parseInt(match[1]) + 1
+    }
+    const numeroOrdine = `ORD-${anno}-${String(nextNum).padStart(3, '0')}`
+
+    const importoNetto = totaleVoci(prev.preventivo_voci)
+
+    const { data: progetto, error } = await supabase.from('progetti').insert({
+      cliente_id:        prev.cliente_id,
+      numero_ordine:     numeroOrdine,
+      numero_offerta:    prev.numero_offerta || null,
+      tipo_servizio:     prev.tipo_servizio,
+      importo_netto:     importoNetto,
+      cassa_percentuale: prev.cassa_percentuale || 0,
+      iva_percentuale:   prev.iva_percentuale  || 22,
+      stato:             'attivo',
+      note:              prev.oggetto ? `Creato da offerta: ${prev.oggetto}` : null,
+    }).select().single()
+
+    if (error || !progetto) return null
+
+    // Copia le voci come SAL se ci sono tranche nel preventivo
+    const { data: tranche } = await supabase
+      .from('preventivo_tranche')
+      .select('*')
+      .eq('preventivo_id', prev.id)
+      .order('ordine')
+
+    if (tranche && tranche.length > 0) {
+      await supabase.from('sal').insert(tranche.map((t: any, i: number) => ({
+        progetto_id:   progetto.id,
+        numero:        i + 1,
+        descrizione:   t.descrizione,
+        percentuale:   t.percentuale,
+        importo:       importoNetto * t.percentuale / 100,
+        stato:         'in_attesa',
+      })))
+    }
+
+    return numeroOrdine
+  }
+
+  async function onStatoChange(p: any, nuovoStato: string) {
+    // Aggiorna stato preventivo
+    await supabase.from('preventivi').update({ stato: nuovoStato }).eq('id', p.id)
+    setPreventivi(prev => prev.map(x => x.id === p.id ? { ...x, stato: nuovoStato } : x))
+
+    // Se accettato → offri creazione ordine
+    if (nuovoStato === 'accettato') {
+      const conferma = confirm(
+        `✅ Preventivo ${p.numero_offerta} segnato come Accettato.\n\nVuoi creare subito l'ordine corrispondente?`
+      )
+      if (conferma) {
+        const numero = await creaOrdineDaPreventivo(p)
+        if (numero) {
+          setToastOrdine({ id: p.id, numero })
+          setTimeout(() => setToastOrdine(null), 6000)
+        }
+      }
+    }
   }
 
   const filtered = preventivi.filter(p => {
@@ -214,11 +291,7 @@ export default function PreventiviPage() {
                     <td style={{ padding: '11px 12px' }}>
                       <select
                         value={p.stato}
-                        onChange={async e => {
-                          const nuovoStato = e.target.value
-                          await supabase.from('preventivi').update({ stato: nuovoStato }).eq('id', p.id)
-                          setPreventivi(prev => prev.map(x => x.id === p.id ? { ...x, stato: nuovoStato } : x))
-                        }}
+                        onChange={e => onStatoChange(p, e.target.value)}
                         style={{
                           fontSize: 11, fontWeight: 700,
                           padding: '4px 22px 4px 9px', borderRadius: 20,
@@ -226,7 +299,7 @@ export default function PreventiviPage() {
                           background: st.bg, color: st.color,
                           cursor: 'pointer', outline: 'none',
                           appearance: 'none' as any,
-                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='${encodeURIComponent(st.color)}'/%3E%3C/svg%3E")`,
+                          backgroundImage: "url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E")",
                           backgroundRepeat: 'no-repeat',
                           backgroundPosition: 'right 7px center',
                         }}
@@ -276,6 +349,35 @@ export default function PreventiviPage() {
         )}
 
       </div>
+      {/* Toast ordine creato */}
+      {toastOrdine && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 999,
+          background: '#166534', color: 'white', borderRadius: 10,
+          padding: '14px 20px', fontSize: 13, fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0,0,0,.2)',
+          display: 'flex', alignItems: 'center', gap: 12,
+          maxWidth: 360,
+        }}>
+          <span style={{ fontSize: 18 }}>✓</span>
+          <div>
+            <div>Ordine <strong>{toastOrdine.numero}</strong> creato con successo!</div>
+            <div style={{ fontSize: 11, fontWeight: 400, marginTop: 3, opacity: .85 }}>
+              Le tranche sono state copiate come SAL
+            </div>
+          </div>
+          <Link
+            href="/ordini"
+            style={{ marginLeft: 8, fontSize: 11, color: '#bbf7d0', textDecoration: 'underline', whiteSpace: 'nowrap' }}
+          >
+            Vai agli ordini →
+          </Link>
+          <button onClick={() => setToastOrdine(null)}
+            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: 16, marginLeft: 4 }}>
+            ✕
+          </button>
+        </div>
+      )}
     </>
   )
 }
