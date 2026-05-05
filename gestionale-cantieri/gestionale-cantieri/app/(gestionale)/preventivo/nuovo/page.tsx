@@ -201,6 +201,7 @@ export default function NuovoPreventivoPage() {
   const [voci,      setVoci]      = useState<Voce[]>([])
   const [ivaLabel,  setIvaLabel]  = useState('22% — standard')
   const [ivaPerc,   setIvaPerc]   = useState(22)
+  const [cassaPerc, setCassaPerc] = useState(4)
   const [tranche,   setTranche]   = useState<Tranche[]>([
     { descrizione: "All'accettazione del preventivo", percentuale: 30 },
     { descrizione: 'Consegna materiali in cantiere',  percentuale: 30 },
@@ -208,9 +209,12 @@ export default function NuovoPreventivoPage() {
     { descrizione: 'Attivazione impianto + D.M. 37/08', percentuale: 10 },
   ])
 
+  const isIngegneria     = tipoServizio === 'ingegneria'
   const totaleImponibile = voci.reduce((acc, v) => acc + v.importo, 0)
-  const ivaImporto       = totaleImponibile * ivaPerc / 100
-  const totaleLordo      = totaleImponibile + ivaImporto
+  const importoCassa     = isIngegneria ? totaleImponibile * cassaPerc / 100 : 0
+  const totaleConCassa   = totaleImponibile + importoCassa
+  const ivaImporto       = totaleConCassa * ivaPerc / 100
+  const totaleLordo      = totaleConCassa + ivaImporto
   const percTot          = tranche.reduce((acc, t) => acc + t.percentuale, 0)
 
   // ── useEffect ─────────────────────────────────────────────────────────────────
@@ -353,6 +357,7 @@ export default function NuovoPreventivoPage() {
         tipo_cliente:       tipoCliente,
         tipologia_impianto: tipologiaImpianto || null,   // ← NUOVO
         iva_percentuale:    tipoCliente === 'privato' ? ivaPerc : null,
+        cassa_percentuale:  isIngegneria ? cassaPerc : 0,
         note:               note || null,
       }).select().single()
 
@@ -965,37 +970,81 @@ export default function NuovoPreventivoPage() {
               </div>
             </div>
 
-            {/* IVA — solo privati */}
-            {tipoCliente === 'privato' && (
+            {/* Cassa ingegneri (solo ingegneria) + IVA (solo privati) */}
+            {(isIngegneria || tipoCliente === 'privato') && (
               <div style={{ ...card, borderLeft: '3px solid #3b82f6', borderRadius: '0 10px 10px 0' }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  IVA applicabile
-                  <span style={{ fontSize: 10, background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>Solo per privati</span>
+                  Riepilogo importi
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
+
+                {/* Cassa — solo ingegneria */}
+                {isIngegneria && (
+                  <div style={{ marginBottom: 16, padding: '12px 14px', background: '#f0fdf4', border: '1px solid rgba(106,176,76,.25)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 10 }}>
+                      Cassa Ingegneri
+                      <span style={{ fontSize: 10, fontWeight: 500, color: '#166534', marginLeft: 8 }}>
+                        applicata su imponibile
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
+                      <div>
+                        <label style={lbl}>Percentuale cassa %</label>
+                        <input
+                          style={inp}
+                          type="number" min={0} max={10} step={0.5}
+                          value={cassaPerc}
+                          onChange={e => setCassaPerc(parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={lbl}>Imponibile voci</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#1e3a5f' }}>{fmt(totaleImponibile)}</div>
+                      </div>
+                      <div style={{ background: 'white', border: '1px solid #d1fae5', borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={lbl}>Cassa ({cassaPerc}%)</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#166534' }}>{fmt(importoCassa)}</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Imponibile + Cassa =</span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: '#1e3a5f' }}>{fmt(totaleConCassa)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* IVA — solo privati */}
+                {tipoCliente === 'privato' && (
                   <div>
-                    <label style={lbl}>Aliquota IVA</label>
-                    <select style={inp} value={ivaLabel} onChange={e => {
-                      const opt = IVA_OPTIONS.find(o => o.label === e.target.value)
-                      setIvaLabel(e.target.value)
-                      setIvaPerc(opt?.value ?? 0)
-                    }}>
-                      {IVA_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
-                    </select>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      IVA applicabile
+                      <span style={{ fontSize: 10, background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>Solo per privati</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
+                      <div>
+                        <label style={lbl}>Aliquota IVA</label>
+                        <select style={inp} value={ivaLabel} onChange={e => {
+                          const opt = IVA_OPTIONS.find(o => o.label === e.target.value)
+                          setIvaLabel(e.target.value)
+                          setIvaPerc(opt?.value ?? 0)
+                        }}>
+                          {IVA_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={lbl}>{isIngegneria ? 'Impon. + Cassa' : 'Imponibile'}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#1e3a5f' }}>{fmt(totaleConCassa)}</div>
+                      </div>
+                      <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={lbl}>IVA {ivaPerc}%</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#475569' }}>{fmt(ivaImporto)}</div>
+                      </div>
+                      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={{ ...lbl, color: '#1d4ed8' }}>Totale con IVA</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: '#1d4ed8' }}>{fmt(totaleLordo)}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={lbl}>Imponibile</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1e3a5f' }}>{fmt(totaleImponibile)}</div>
-                  </div>
-                  <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={lbl}>IVA</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#475569' }}>{fmt(ivaImporto)}</div>
-                  </div>
-                  <div style={{ background: '#f0fdf4', border: '1px solid rgba(106,176,76,.3)', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={{ ...lbl, color: '#166534' }}>Totale con IVA</div>
-                    <div style={{ fontSize: 17, fontWeight: 800, color: '#166534' }}>{fmt(totaleLordo)}</div>
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -1011,7 +1060,7 @@ export default function NuovoPreventivoPage() {
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 130px', gap: 8, marginBottom: 7, alignItems: 'center' }}>
                   <input style={{ ...inp, padding: '6px 8px' }} value={t.descrizione} onChange={e => updateTranche(i, 'descrizione', e.target.value)} />
                   <input style={{ ...inp, padding: '6px 8px', textAlign: 'right' }} type="number" value={t.percentuale} onChange={e => updateTranche(i, 'percentuale', parseFloat(e.target.value) || 0)} min={0} max={100} />
-                  <span style={{ fontWeight: 700, color: '#1e3a5f', fontSize: 13 }}>{fmt(totaleImponibile * t.percentuale / 100)}</span>
+                  <span style={{ fontWeight: 700, color: '#1e3a5f', fontSize: 13 }}>{fmt(totaleConCassa * t.percentuale / 100)}</span>
                 </div>
               ))}
               {Math.abs(percTot - 100) > 0.01 && (
