@@ -32,6 +32,7 @@ export default function PreventiviPage() {
   const [filtroServizio, setFiltroServizio] = useState('')
   const [deleting,       setDeleting]       = useState<string | null>(null)
   const [toastOrdine,    setToastOrdine]    = useState<{ id: string; numero: string } | null>(null)
+  const [creandoOrdine,  setCreandoOrdine]  = useState<string | null>(null)
 
   useEffect(() => {
     supabase
@@ -114,6 +115,16 @@ export default function PreventiviPage() {
     }
 
     return numeroOrdine
+  }
+
+  async function convertiInOrdine(p: any) {
+    setCreandoOrdine(p.id)
+    const numero = await creaOrdineDaPreventivo(p)
+    setCreandoOrdine(null)
+    if (numero) {
+      setToastOrdine({ id: p.id, numero })
+      setTimeout(() => setToastOrdine(null), 6000)
+    }
   }
 
   async function onStatoChange(p: any, nuovoStato: string) {
@@ -298,10 +309,6 @@ export default function PreventiviPage() {
                           border: `1px solid ${st.color}40`,
                           background: st.bg, color: st.color,
                           cursor: 'pointer', outline: 'none',
-                          appearance: 'none' as any,
-                          backgroundImage: "url(data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27%3E%3Cpath d=%27M0 0l5 6 5-6z%27 fill=%27%2364748b%27/%3E%3C/svg%3E)",
-                          backgroundRepeat: 'no-repeat',
-                          backgroundPosition: 'right 7px center',
                         }}
                       >
                         {Object.entries(STATO_CFG).map(([k, v]) => (
@@ -312,7 +319,22 @@ export default function PreventiviPage() {
 
                     {/* Azioni */}
                     <td style={{ padding: '11px 12px' }}>
-                      <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {p.stato === 'accettato' && (
+                          <button
+                            onClick={() => convertiInOrdine(p)}
+                            disabled={creandoOrdine === p.id}
+                            style={{
+                              fontSize: 10, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
+                              background: creandoOrdine === p.id ? '#f1f5f9' : '#166534',
+                              color: creandoOrdine === p.id ? '#94a3b8' : 'white',
+                              border: 'none', cursor: creandoOrdine === p.id ? 'not-allowed' : 'pointer',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {creandoOrdine === p.id ? '⏳...' : '→ Crea ordine'}
+                          </button>
+                        )}
                         <Link
                           href={`/preventivo/${p.id}`}
                           style={{ fontSize: 10, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
