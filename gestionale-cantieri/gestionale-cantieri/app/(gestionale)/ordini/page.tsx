@@ -210,7 +210,7 @@ export default function OrdiniPage() {
                           background: st.bg, color: st.color,
                           cursor: 'pointer', outline: 'none',
                           appearance: 'none' as any,
-                          backgroundImage: "url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E")",
+                          backgroundImage: "url(data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27%3E%3Cpath d=%27M0 0l5 6 5-6z%27 fill=%27%2364748b%27/%3E%3C/svg%3E)",
                           backgroundRepeat: 'no-repeat',
                           backgroundPosition: 'right 7px center',
                         }}
