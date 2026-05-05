@@ -210,11 +210,31 @@ export default function PreventiviPage() {
                       )}
                     </td>
 
-                    {/* Stato */}
+                    {/* Stato — dropdown inline con autosave */}
                     <td style={{ padding: '11px 12px' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: st.bg, color: st.color }}>
-                        {st.label}
-                      </span>
+                      <select
+                        value={p.stato}
+                        onChange={async e => {
+                          const nuovoStato = e.target.value
+                          await supabase.from('preventivi').update({ stato: nuovoStato }).eq('id', p.id)
+                          setPreventivi(prev => prev.map(x => x.id === p.id ? { ...x, stato: nuovoStato } : x))
+                        }}
+                        style={{
+                          fontSize: 11, fontWeight: 700,
+                          padding: '4px 22px 4px 9px', borderRadius: 20,
+                          border: `1px solid ${st.color}40`,
+                          background: st.bg, color: st.color,
+                          cursor: 'pointer', outline: 'none',
+                          appearance: 'none' as any,
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='${encodeURIComponent(st.color)}'/%3E%3C/svg%3E")`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 7px center',
+                        }}
+                      >
+                        {Object.entries(STATO_CFG).map(([k, v]) => (
+                          <option key={k} value={k}>{v.label}</option>
+                        ))}
+                      </select>
                     </td>
 
                     {/* Azioni */}
