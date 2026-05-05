@@ -91,6 +91,7 @@ export default function NuovoPreventivoPage() {
   // 0 = tipo servizio/cliente  |  1 = calcolatore FV (solo fornitura)  |  2 = form preventivo
   const [step,    setStep]    = useState<0 | 1 | 2>(0)
   const [loading, setLoading] = useState(false)
+  const [errore,  setErrore]  = useState<string | null>(null)
 
   // ── Step 0 ───────────────────────────────────────────────────────────────────
   const [tipoServizio,      setTipoServizio]      = useState<TipoServizio | null>(null)
@@ -345,6 +346,7 @@ export default function NuovoPreventivoPage() {
 
   async function salva() {
     setLoading(true)
+    setErrore(null)
     try {
       const { data: prev, error } = await supabase.from('preventivi').insert({
         numero_offerta:     numeroOfferta,
@@ -385,8 +387,9 @@ export default function NuovoPreventivoPage() {
       await supabase.from('preventivo_tranche').insert(trancheDaInserire)
 
       router.push(`/preventivo/${prev.id}`)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      setErrore(e?.message || 'Errore durante il salvataggio. Controlla che tutte le colonne esistano nel database.')
       setLoading(false)
     }
   }
@@ -1075,6 +1078,12 @@ export default function NuovoPreventivoPage() {
               <label style={lbl}>Note aggiuntive (opzionali)</label>
               <textarea style={{ ...inp, resize: 'vertical' }} rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Condizioni particolari, esclusioni, note al cliente..." />
             </div>
+
+            {errore && (
+              <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 12, color: '#991b1b' }}>
+                ⚠ {errore}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setStep(isFornitura ? 1 : 0)} style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, cursor: 'pointer' }}>← Indietro</button>
