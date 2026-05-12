@@ -69,11 +69,18 @@ Estrai tutte le informazioni rilevanti e rispondi SOLO con un JSON nel formato s
 Metti true solo per gli item di cui trovi evidenza diretta nei documenti.
 Regole specifiche:
 - Se il documento è una bolletta elettrica: "bolletta": true, cerca il POD nel campo "Punto di prelievo" (formato IT001E...)
-- Se vedi un IBAN (formato IT + numeri): "iban": true, inseriscilo nelle note
+- Se vedi un IBAN (formato IT + 2 lettere + numeri, es. IT19L...): "iban": true, inseriscilo nelle note
 - Se vedi un documento d'identità (carta d'identità, passaporto, patente): "doc_id": true
 - Se vedi dati tecnici di inverter: "inverter": true
 - Se vedi dati di moduli fotovoltaici: "moduli": true
-- Se vedi una visura camerale: "visura": true`
+- Se vedi una visura camerale: "visura": true
+- Se vedi un modulo pratiche di connessione FV (con campi come IBAN, codice fiscale, email Gaudì, POD scritto a mano): 
+  * "iban": true se c'è un IBAN scritto
+  * "gaudi_mail": true se c'è una email scritta nel campo registrazione Gaudì
+  * "bolletta": true se c'è un campo bolletta spuntato
+  * "doc_id": true se c'è un campo documento d'identità spuntato
+  * cerca il POD scritto a mano (formato IT001E...)
+  * inserisci nelle note: email Gaudì, codice fiscale, cellulare, foglio/particella/sub se presenti`
     })
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
