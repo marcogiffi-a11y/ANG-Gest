@@ -74,13 +74,13 @@ Regole specifiche:
 - Se vedi dati tecnici di inverter: "inverter": true
 - Se vedi dati di moduli fotovoltaici: "moduli": true
 - Se vedi una visura camerale: "visura": true
-- Se vedi un modulo pratiche di connessione FV (con campi come IBAN, codice fiscale, email Gaudì, POD scritto a mano): 
-  * "iban": true se c'è un IBAN scritto
-  * "gaudi_mail": true se c'è una email scritta nel campo registrazione Gaudì
-  * "bolletta": true se c'è un campo bolletta spuntato
-  * "doc_id": true se c'è un campo documento d'identità spuntato
-  * cerca il POD scritto a mano (formato IT001E...)
-  * inserisci nelle note: email Gaudì, codice fiscale, cellulare, foglio/particella/sub se presenti`
+- Se vedi un modulo pratiche di connessione FV (con intestazione ANG o simile, con campi compilati a mano):
+  * "gaudi_mail": true SE vedi QUALSIASI indirizzo email scritto (es. @gmail.com, @libero.it ecc.) — OBBLIGATORIO se c'è una email
+  * "iban": true SE vedi una stringa che inizia con IT seguita da lettere e numeri (es. IT19L...)
+  * "doc_id": true se c'è una spunta o V vicino a "documento d'identità"
+  * "bolletta": true se c'è una spunta o V vicino a "bolletta"
+  * cerca il POD scritto a mano in fondo al documento (formato IT001E...)
+  * nel campo "note" inserisci TUTTI i dati leggibili: email, IBAN, codice fiscale, cellulare, foglio/particella/sub, POD`
     })
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
