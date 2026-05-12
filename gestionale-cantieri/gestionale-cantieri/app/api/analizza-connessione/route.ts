@@ -91,7 +91,15 @@ Rispondi SOLO con un JSON (senza markdown, senza testo aggiuntivo) con questa st
     "tipo_remunerazione": "null"
   }
 }
-Estrai TUTTI i valori leggibili. Per i campi non trovati usa null (stringa). Non inventare dati.`
+Regole di estrazione:
+- POD: cercalo in questi posti in ordine: campo "POD (Punto di prelievo)" nella bolletta, scritto a mano nel modulo ANG (formato IT001E...), nella schermata e-distribuzione. Mettilo SEMPRE in dati_impianto.pod
+- UBICAZIONE IMPIANTO: leggila dal campo "Servizio fornito in" della bolletta (es. "Servizio fornito in VIA SALTO 1 - 67058 SAN BENEDETTO DEI MARSI AQ"). Estrai: indirizzo, numero civico, CAP, comune, provincia
+- EMAIL: qualsiasi indirizzo email trovato va in richiesta.email_gaudi E in titolare.email_produttore
+- IBAN: formato IT + lettere/numeri, mettilo in richiesta.iban
+- NOME/COGNOME: dall'intestazione bolletta o dal modulo ANG, mettili in titolare.nome e titolare.cognome
+- CODICE FISCALE: formato XXXXXX00X00X000X, mettilo in titolare.codice_fiscale
+- POTENZE: dalla schermata e-distribuzione o da schede tecniche
+- Per i campi non trovati usa null (stringa). Non inventare dati.`
     })
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
