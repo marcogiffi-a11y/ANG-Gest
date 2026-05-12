@@ -65,7 +65,13 @@ Estrai tutte le informazioni rilevanti e rispondi SOLO con un JSON nel formato s
   }
 }
 Metti true solo per gli item di cui trovi evidenza diretta nei documenti.
-Per la bolletta: se il documento è una bolletta elettrica metti "bolletta": true e cerca il POD nel campo "Punto di prelievo".`
+Regole specifiche:
+- Se il documento è una bolletta elettrica: "bolletta": true, cerca il POD nel campo "Punto di prelievo" (formato IT001E...)
+- Se vedi un IBAN (formato IT + numeri): "iban": true, inseriscilo nelle note
+- Se vedi un documento d'identità (carta d'identità, passaporto, patente): "doc_id": true
+- Se vedi dati tecnici di inverter: "inverter": true
+- Se vedi dati di moduli fotovoltaici: "moduli": true
+- Se vedi una visura camerale: "visura": true`
     })
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -85,10 +91,21 @@ Per la bolletta: se il documento è una bolletta elettrica metti "bolletta": tru
     const data = await response.json()
     const text = data.content?.find((b: any) => b.type === 'text')?.text || ''
 
+    // Estrai JSON anche se è annidato in testo
+    let parsed = null
     try {
-      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
-      return NextResponse.json({ ok: true, result: parsed })
+      // Prima prova: JSON puro
+      parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
     } catch {
+      // Seconda prova: cerca il primo { ... } nel testo
+      const match = text.match(/\{[\s\S]*\}/)
+      if (match) {
+        try { parsed = JSON.parse(match[0]) } catch {}
+      }
+    }
+    if (parsed) {
+      return NextResponse.json({ ok: true, result: parsed })
+    } else {
       return NextResponse.json({ ok: false, raw: text })
     }
   } catch (error) {
