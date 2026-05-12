@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 60
+
 export async function POST(request: NextRequest) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -82,13 +84,16 @@ Regole specifiche:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-opus-4-5',
         max_tokens: 1000,
         messages: [{ role: 'user', content: contentBlocks }],
       }),
     })
 
     const data = await response.json()
+    if (data.error) {
+      return NextResponse.json({ ok: false, raw: `Errore Anthropic: ${data.error.message}` })
+    }
     const text = data.content?.find((b: any) => b.type === 'text')?.text || ''
 
     // Estrai JSON anche se è annidato in testo
