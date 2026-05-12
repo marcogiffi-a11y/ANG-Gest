@@ -510,7 +510,13 @@ export default function PraticaPage({ params }: { params: { id: string } }) {
       })}
 
       {/* Footer save */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 20 }}>
+        <Link
+          href={`/pratica-connessione/${progettoId}`}
+          style={{ padding: '10px 20px', borderRadius: 7, border: '1px solid #1e3a5f', background: '#1e3a5f', color: 'white', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}
+        >
+          ⚡ Vai alla domanda di connessione
+        </Link>
         <button
           onClick={salva}
           disabled={saving}
