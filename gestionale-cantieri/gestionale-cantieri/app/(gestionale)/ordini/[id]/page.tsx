@@ -77,7 +77,8 @@ export default function DettaglioOrdine() {
   const [saved,   setSaved]   = useState(false)
 
   // Dati ordine
-  const [progetto,    setProgetto]    = useState<any>(null)
+  const [progetto,     setProgetto]     = useState<any>(null)
+  const [numeroOrdine, setNumeroOrdine] = useState('')
   const [importoNetto, setImportoNetto] = useState(0)
   const [cassaPerc,   setCassaPerc]   = useState(4)
   const [ivaPerc,     setIvaPerc]     = useState(22)
@@ -109,6 +110,7 @@ export default function DettaglioOrdine() {
       if (!p) { router.push('/ordini'); return }
 
       setProgetto(p)
+      setNumeroOrdine(p.numero_ordine || '')
       setImportoNetto(p.importo_netto || 0)
       setCassaPerc(p.cassa_percentuale || 4)
       setIvaPerc(p.iva_percentuale || 22)
@@ -144,6 +146,7 @@ export default function DettaglioOrdine() {
     setSaving(true)
     await supabase.from('progetti').update({
       importo_netto:    importoNetto,
+      numero_ordine:    numeroOrdine,
       cassa_percentuale: isFornitura ? 0 : cassaPerc,
       iva_percentuale:  ivaPerc,
       stato,
@@ -272,9 +275,12 @@ export default function DettaglioOrdine() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div>
               <label style={lbl}>N° ordine</label>
-              <div style={{ ...inp, background: '#f8fafc', color: '#0f172a', fontWeight: 700, fontFamily: 'monospace' }}>
-                {progetto.numero_ordine}
-              </div>
+              <input
+                style={{ ...inp, fontWeight: 700, fontFamily: 'monospace' }}
+                value={numeroOrdine}
+                onChange={e => setNumeroOrdine(e.target.value)}
+                placeholder="Es. ORD-2026-001"
+              />
             </div>
             <div>
               <label style={lbl}>Data creazione</label>
