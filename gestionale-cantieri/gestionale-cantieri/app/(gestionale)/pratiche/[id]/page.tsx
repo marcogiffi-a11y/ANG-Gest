@@ -194,53 +194,80 @@ export default function PraticaPage({ params }: { params: { id: string } }) {
     setAiResult('')
 
     try {
-      // Scarica i file, convertili in base64 e invia all'API route
-      const docsPayload: any[] = []
-      for (const doc of documenti.slice(0, 5)) {
+      // Analizza i file uno alla volta per evitare payload troppo grandi
+      let podTrovato = ''
+      let distributoreTrovato = ''
+      let tipoSoggettoTrovato = ''
+      const noteTrovate: string[] = []
+      const checklistMerge: any = {}
+
+      for (let i = 0; i < Math.min(documenti.length, 8); i++) {
+        const doc = documenti[i]
+        setAiResult(`🔄 Analisi documento ${i + 1} di ${Math.min(documenti.length, 8)}...`)
+
         const { data: fileData } = await supabase.storage
           .from('documenti-pratiche')
           .download(doc.path)
         if (!fileData) continue
+
         const b64 = await new Promise<string>((res, rej) => {
           const reader = new FileReader()
           reader.onload = () => res((reader.result as string).split(',')[1])
           reader.onerror = () => rej(new Error('Read failed'))
           reader.readAsDataURL(fileData)
         })
-        docsPayload.push({ base64: b64, tipo: doc.tipo, nome: doc.nome })
-      }
 
-      const resp = await fetch('/api/analizza-pratica', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documenti: docsPayload }),
-      })
-      const data = await resp.json()
+        const resp = await fetch('/api/analizza-pratica', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documenti: [{ base64: b64, tipo: doc.tipo, nome: doc.nome }] }),
+        })
 
-      if (!data.ok) {
-        setAiResult('⚠️ Risposta AI ricevuta ma non parsabile. Controlla i dati manualmente.\n\n' + (data.raw || data.error || ''))
-      } else {
+        let data: any = null
+        try {
+          data = await resp.json()
+        } catch { continue }
+
+        if (!data?.ok) continue
+
         const parsed = data.result
-        if (parsed.pod)           setPod(parsed.pod)
-        if (parsed.distributore)  setDistributore(parsed.distributore)
-        if (parsed.tipo_soggetto) setTipoSoggetto(parsed.tipo_soggetto)
-        if (parsed.note)          setNote(prev => prev ? prev + '\n' + parsed.note : parsed.note)
+        if (parsed.pod && !podTrovato)           podTrovato = parsed.pod
+        if (parsed.distributore && !distributoreTrovato) distributoreTrovato = parsed.distributore
+        if (parsed.tipo_soggetto && !tipoSoggettoTrovato) tipoSoggettoTrovato = parsed.tipo_soggetto
+        if (parsed.note)                         noteTrovate.push(parsed.note)
 
+        // Merge checklist — prendi i true
         if (parsed.checklist) {
-          setChecklist((prev: any) => {
-            const updated = JSON.parse(JSON.stringify(prev))
-            Object.entries(parsed.checklist).forEach(([stage, items]: any) => {
-              Object.entries(items).forEach(([itemId, val]) => {
-                if (updated[stage]?.[itemId] !== undefined && val === true) {
-                  updated[stage][itemId] = { checked: true, completedAt: today() }
-                }
-              })
+          Object.entries(parsed.checklist).forEach(([stage, items]: any) => {
+            if (!checklistMerge[stage]) checklistMerge[stage] = {}
+            Object.entries(items).forEach(([itemId, val]) => {
+              if (val === true) checklistMerge[stage][itemId] = true
             })
-            return updated
           })
         }
-        setAiResult('✅ Analisi completata! Campi e checklist aggiornati. Premi Salva per confermare.')
       }
+
+      // Applica risultati aggregati
+      if (podTrovato)           setPod(podTrovato)
+      if (distributoreTrovato)  setDistributore(distributoreTrovato)
+      if (tipoSoggettoTrovato)  setTipoSoggetto(tipoSoggettoTrovato)
+      if (noteTrovate.length)   setNote(prev => prev ? prev + '\n' + noteTrovate.join('\n') : noteTrovate.join('\n'))
+
+      if (Object.keys(checklistMerge).length > 0) {
+        setChecklist((prev: any) => {
+          const updated = JSON.parse(JSON.stringify(prev))
+          Object.entries(checklistMerge).forEach(([stage, items]: any) => {
+            Object.entries(items).forEach(([itemId, val]) => {
+              if (updated[stage]?.[itemId] !== undefined && val === true) {
+                updated[stage][itemId] = { checked: true, completedAt: today() }
+              }
+            })
+          })
+          return updated
+        })
+      }
+
+      setAiResult('✅ Analisi completata! Campi e checklist aggiornati. Premi Salva per confermare.')
     } catch (err) {
       setAiResult('❌ Errore durante l\'analisi: ' + String(err))
     }
