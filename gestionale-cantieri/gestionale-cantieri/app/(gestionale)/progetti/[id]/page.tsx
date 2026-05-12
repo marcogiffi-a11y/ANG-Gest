@@ -554,6 +554,7 @@ export default function DettaglioProgetto() {
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <Link href="/ordini" style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, textDecoration: 'none' }}>← Tutti gli ordini</Link>
           <Link href="/progetti" style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, textDecoration: 'none' }}>← Tutti i progetti</Link>
+          <Link href={`/pratiche/${params.id}`} style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #1e3a5f', background: '#1e3a5f', color: 'white', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>📋 Apri Progetto</Link>
         </div>
 
       </div>
