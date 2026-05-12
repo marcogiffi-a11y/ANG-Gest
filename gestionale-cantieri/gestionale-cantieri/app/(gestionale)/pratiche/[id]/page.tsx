@@ -194,9 +194,9 @@ export default function PraticaPage({ params }: { params: { id: string } }) {
     setAiResult('')
 
     try {
-      // Scarica i file e convertili in base64
-      const contentBlocks: any[] = []
-      for (const doc of documenti.slice(0, 5)) { // max 5 documenti
+      // Scarica i file, convertili in base64 e invia all'API route
+      const docsPayload: any[] = []
+      for (const doc of documenti.slice(0, 5)) {
         const { data: fileData } = await supabase.storage
           .from('documenti-pratiche')
           .download(doc.path)
@@ -207,77 +207,25 @@ export default function PraticaPage({ params }: { params: { id: string } }) {
           reader.onerror = () => rej(new Error('Read failed'))
           reader.readAsDataURL(fileData)
         })
-        const isPdf = doc.tipo === 'application/pdf'
-        contentBlocks.push({
-          type: isPdf ? 'document' : 'image',
-          source: {
-            type: 'base64',
-            media_type: doc.tipo || (isPdf ? 'application/pdf' : 'image/jpeg'),
-            data: b64,
-          },
-        })
+        docsPayload.push({ base64: b64, tipo: doc.tipo, nome: doc.nome })
       }
 
-      contentBlocks.push({
-        type: 'text',
-        text: `Analizza questi documenti relativi a una pratica di connessione fotovoltaica.
-Estrai tutte le informazioni rilevanti e rispondi SOLO con un JSON nel formato seguente (senza markdown):
-{
-  "pod": "codice POD se trovato, altrimenti null",
-  "distributore": "nome distributore se trovato (es. e-distribuzione), altrimenti null",
-  "tipo_soggetto": "persona_fisica o persona_giuridica",
-  "note": "breve sintesi dei punti chiave trovati nei documenti",
-  "checklist": {
-    "ricezione": {
-      "doc_id": true,
-      "bolletta": true,
-      "iban": false,
-      "inverter": false,
-      "moduli": false,
-      "batterie": false,
-      "visura": false,
-      "gaudi_mail": false
-    },
-    "domanda": {
-      "domanda_inviata": false,
-      "mandato_inviato": false,
-      "mandato_rientrato": false
-    },
-    "regolamento": {
-      "autotest_provarele": false,
-      "dico": false,
-      "regolamento_inviato": false
-    },
-    "integrazioni": {
-      "integrazione_richiesta": false,
-      "integrazione_cliente": false,
-      "integrazione_inviata": false
-    }
-  }
-}
-Metti true solo per gli item di cui trovi evidenza diretta nei documenti.`
-      })
-
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch('/api/analizza-pratica', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: contentBlocks }],
-        })
+        body: JSON.stringify({ documenti: docsPayload }),
       })
       const data = await resp.json()
-      const text = data.content?.find((b: any) => b.type === 'text')?.text || ''
 
-      try {
-        const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
-        if (parsed.pod)          setPod(parsed.pod)
-        if (parsed.distributore) setDistributore(parsed.distributore)
+      if (!data.ok) {
+        setAiResult('⚠️ Risposta AI ricevuta ma non parsabile. Controlla i dati manualmente.\n\n' + (data.raw || data.error || ''))
+      } else {
+        const parsed = data.result
+        if (parsed.pod)           setPod(parsed.pod)
+        if (parsed.distributore)  setDistributore(parsed.distributore)
         if (parsed.tipo_soggetto) setTipoSoggetto(parsed.tipo_soggetto)
-        if (parsed.note)         setNote(prev => prev ? prev + '\n' + parsed.note : parsed.note)
+        if (parsed.note)          setNote(prev => prev ? prev + '\n' + parsed.note : parsed.note)
 
-        // Aggiorna checklist
         if (parsed.checklist) {
           setChecklist((prev: any) => {
             const updated = JSON.parse(JSON.stringify(prev))
@@ -292,8 +240,6 @@ Metti true solo per gli item di cui trovi evidenza diretta nei documenti.`
           })
         }
         setAiResult('✅ Analisi completata! Campi e checklist aggiornati. Premi Salva per confermare.')
-      } catch {
-        setAiResult('⚠️ Risposta AI ricevuta ma non parsabile. Controlla i dati manualmente.\n\n' + text)
       }
     } catch (err) {
       setAiResult('❌ Errore durante l\'analisi: ' + String(err))
