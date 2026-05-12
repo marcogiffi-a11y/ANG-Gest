@@ -74,6 +74,7 @@ Regole specifiche:
 - Se vedi dati tecnici di inverter: "inverter": true
 - Se vedi dati di moduli fotovoltaici: "moduli": true
 - Se vedi una visura camerale: "visura": true
+- "gaudi_mail": true SE vedi QUALSIASI indirizzo email nel documento (qualunque stringa con @ e dominio, es. @gmail.com). REGOLA ASSOLUTA: se c'è una email, gaudi_mail è sempre true.
 - Se vedi un modulo pratiche di connessione FV (con intestazione ANG o simile, con campi compilati a mano):
   * "gaudi_mail": true SE vedi QUALSIASI indirizzo email scritto (es. @gmail.com, @libero.it ecc.) — OBBLIGATORIO se c'è una email
   * "iban": true SE vedi una stringa che inizia con IT seguita da lettere e numeri (es. IT19L...)
