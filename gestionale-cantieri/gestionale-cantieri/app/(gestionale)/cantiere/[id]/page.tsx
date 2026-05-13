@@ -109,10 +109,12 @@ export default function CantierePage() {
     setAppMsg('')
     const nome = nomeCliente(progetto?.clienti)
     const squadraSelezionata = squadre.find(s => s.id.toString() === squadraId.toString())
+    console.log('🚀 inserisciInApp chiamata', { nome, id, cantiereApp, squadraSelezionata })
 
     if (cantiereApp) {
       // Aggiorna cantiere esistente
-      const { error } = await supabaseCantieri
+      console.log('🔄 Aggiornamento cantiere esistente...')
+      const { data: updData, error } = await supabaseCantieri
         .from('cantieri')
         .update({
           cliente:    nome,
@@ -122,6 +124,8 @@ export default function CantierePage() {
           gest_id:    id,
         })
         .eq('gest_id', id)
+        .select()
+      console.log('📦 Risultato update:', updData, 'Errore:', error)
       if (error) { setAppMsg('❌ Errore aggiornamento: ' + error.message) }
       else { setAppMsg('✅ Cantiere aggiornato in ANG Cantieri!'); setCantiereApp({ ...cantiereApp, kw: potenza, acc: accumulo }) }
     } else {
