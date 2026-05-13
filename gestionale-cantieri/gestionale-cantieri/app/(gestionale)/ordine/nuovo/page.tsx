@@ -1,8 +1,15 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { createClient as createClientBrowser } from '@supabase/supabase-js'
 import Topbar from '@/components/Topbar'
 import { useRouter } from 'next/navigation'
+
+// Client athena-cantieri per creare il cantiere automaticamente
+const supabaseCantieri = createClientBrowser(
+  'https://bfcfgxpkwmlhvjhegmxv.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmY2ZneHBrd21saHZqaGVnbXh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyOTM5NzIsImV4cCI6MjA5Mjg2OTk3Mn0.PbwbpCklqiZv_rrsCjATxc56rNCNy_s-cXSideAMY0Y'
+)
 
 type Sal = { numero: number; descrizione: string; percentuale: number; importo: number; data_prevista: string }
 
@@ -149,6 +156,19 @@ export default function NuovoOrdinePage() {
           data_prevista: s.data_prevista || null,
           stato: 'in_attesa',
         })))
+      }
+
+      // Se fornitura_posa → crea cantiere in athena-cantieri
+      if (tipoServizio === 'fornitura_posa') {
+        await supabaseCantieri.from('cantieri').insert([{
+          cliente: ragioneSociale,
+          kw: null,
+          acc: null,
+          gest_id: progetto!.id,
+          check_list: [false, false, false, false, false],
+          disponibilita: [],
+          installazioni: [],
+        }])
       }
 
       // Carica PDF se presente
