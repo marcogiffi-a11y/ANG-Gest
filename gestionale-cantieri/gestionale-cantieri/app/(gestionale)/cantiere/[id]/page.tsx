@@ -109,42 +109,40 @@ export default function CantierePage() {
     setAppMsg('')
     const nome = nomeCliente(progetto?.clienti)
     const squadraSelezionata = squadre.find(s => s.id.toString() === squadraId.toString())
-    console.log('🚀 inserisciInApp chiamata', { nome, id, cantiereApp, squadraSelezionata })
+
+    // Converti checklist da oggetto ANG Gest → array athena-cantieri
+    // Format: [sopralluogo, materiali_ordinati, materiali_stato, posa_impianto, collaudo_impianto]
+    const checkListApp = [
+      checklist.sopralluogo,
+      checklist.materiali_ordinati,
+      checklist.materiali_stato || false,
+      checklist.posa_impianto,
+      checklist.collaudo_impianto,
+    ]
+
+    const payload = {
+      cliente:    nome,
+      kw:         potenza  || null,
+      acc:        accumulo || null,
+      squadra_id: squadraSelezionata?.id || null,
+      gest_id:    id,
+      check_list: checkListApp,
+    }
 
     if (cantiereApp) {
-      // Aggiorna cantiere esistente
-      console.log('🔄 Aggiornamento cantiere esistente...')
-      const { data: updData, error } = await supabaseCantieri
+      const { error } = await supabaseCantieri
         .from('cantieri')
-        .update({
-          cliente:    nome,
-          kw:         potenza  || null,
-          acc:        accumulo || null,
-          squadra_id: squadraSelezionata?.id || null,
-          gest_id:    id,
-        })
+        .update(payload)
         .eq('gest_id', id)
-        .select()
-      console.log('📦 Risultato update:', updData, 'Errore:', error)
-      if (error) { setAppMsg('❌ Errore aggiornamento: ' + error.message) }
-      else { setAppMsg('✅ Cantiere aggiornato in ANG Cantieri!'); setCantiereApp({ ...cantiereApp, kw: potenza, acc: accumulo }) }
+      if (error) { setAppMsg('❌ Errore: ' + error.message) }
+      else { setAppMsg('✅ Cantiere aggiornato in ANG Cantieri!'); setCantiereApp({ ...cantiereApp, ...payload }) }
     } else {
-      // Crea nuovo cantiere
       const { data, error } = await supabaseCantieri
         .from('cantieri')
-        .insert([{
-          cliente:    nome,
-          kw:         potenza  || null,
-          acc:        accumulo || null,
-          squadra_id: squadraSelezionata?.id || null,
-          gest_id:    id,
-          check_list:    [false, false, false, false, false],
-          disponibilita: [],
-          installazioni: [],
-        }])
+        .insert([{ ...payload, disponibilita: [], installazioni: [] }])
         .select()
         .single()
-      if (error) { setAppMsg('❌ Errore creazione: ' + error.message) }
+      if (error) { setAppMsg('❌ Errore: ' + error.message) }
       else { setAppMsg('✅ Cantiere inserito in ANG Cantieri!'); setCantiereApp(data) }
     }
     setAppLoading(false)
