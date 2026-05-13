@@ -223,7 +223,7 @@ export default function FornituraePosaPage() {
                     <td style={{ padding: '11px 12px' }}>
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                         <Link
-                          href={`/ordini/${o.id}`}
+                          href={`/cantiere/${o.id}`}
                           style={{ fontSize: 10, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
                             background: '#fffbeb', color: '#92400e', textDecoration: 'none',
                             border: '1px solid #fcd34d', whiteSpace: 'nowrap' }}
