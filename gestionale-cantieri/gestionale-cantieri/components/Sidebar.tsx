@@ -18,7 +18,7 @@ const navItems = [
   { href: '/richieste-offerta',   label: 'Richieste di Offerta',  icon: '📲', badgeKey: 'richieste' },
   { href: '/preventivi',          label: 'Preventivi',            icon: '📝' },
   { href: '/ordini',              label: 'Ordini',                 icon: '📄' },
-  { href: '/fornitura-posa',      label: 'Fornitura e Posa',       icon: '🔧' },
+  { href: '/fornitura-posa',      label: 'Gestione Cantieri',      icon: '🏗️' },
   { href: '/progetti',            label: 'Progetti',              icon: '≡' },
   { href: '/fatture',             label: 'Fatture & SAL',         icon: '📋', dot: true },
   { href: '/scadenze',            label: 'Scadenze',              icon: '📅' },
