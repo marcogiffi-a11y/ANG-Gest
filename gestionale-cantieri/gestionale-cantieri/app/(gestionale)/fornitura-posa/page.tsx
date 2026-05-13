@@ -72,22 +72,36 @@ export default function GestioneCantieriPage() {
 
   // 2. Carica cantieri da athena-cantieri per nome cliente
   async function loadCantieri(ords: any[]) {
-    const nomi = ords
-      .map(o => nomeCliente(o.clienti))
-      .filter(n => n && n !== '—')
+    const ids = ords.map(o => o.id).filter(Boolean)
+    if (!ids.length) return
 
-    if (!nomi.length) return
+    // Prima cerca per gest_id (cantieri creati da ANG Gest)
+    const { data: byId } = await supabaseCantieri
+      .from('cantieri')
+      .select('*')
+      .in('gest_id', ids)
 
-    const { data } = await supabaseCantieri
+    // Poi cerca per nome cliente (cantieri creati prima)
+    const nomi = ords.map(o => nomeCliente(o.clienti)).filter(n => n && n !== '—')
+    const { data: byNome } = await supabaseCantieri
       .from('cantieri')
       .select('*')
       .in('cliente', nomi)
 
-    if (data) {
-      const map: Record<string, any> = {}
-      data.forEach(c => { map[c.cliente] = c })
-      setCantieri(map)
-    }
+    const all = [...(byId || []), ...(byNome || [])]
+    const map: Record<string, any> = {}
+
+    // Mappa per gest_id
+    all.forEach(c => {
+      if (c.gest_id) map[c.gest_id] = c
+    })
+
+    // Mappa per nome (fallback)
+    all.forEach(c => {
+      if (!c.gest_id) map[c.cliente] = c
+    })
+
+    setCantieri(map)
   }
 
   // 3. Realtime su athena-cantieri
@@ -242,7 +256,7 @@ export default function GestioneCantieriPage() {
 
           {filtered.map(o => {
             const nome     = nomeCliente(o.clienti)
-            const cantiere = cantieri[nome]
+            const cantiere = cantieri[o.id] || cantieri[nome]
             const pct      = avanzamentoCantiere(cantiere)
             const sal      = salSommario(o.sal)
             const st       = STATO_STYLE[o.stato] || STATO_STYLE.bozza
